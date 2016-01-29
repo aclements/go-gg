@@ -58,14 +58,6 @@ func NewVar(seq interface{}) Var {
 	return varBase{rv.Interface()}
 }
 
-// NewVar1 returns a Var of length 1 whose one value is value.
-func NewVar1(value interface{}) Var {
-	rv := reflect.ValueOf(value)
-	s := reflect.MakeSlice(reflect.SliceOf(rv.Type()), 1, 1)
-	s.Index(0).Set(rv)
-	return varBase{s.Interface()}
-}
-
 func (v varBase) isVar()           {}
 func (v varBase) Seq() interface{} { return v.value }
 func (v varBase) Len() int         { return reflect.ValueOf(v.value).Len() }
@@ -366,15 +358,12 @@ var canCardinal = map[reflect.Kind]bool{
 
 // AutoVar returns a Var backed by data. The subtype of Var depends on
 // the type of data. If data is already a Var, it is simply returned.
-// If data is boolean, numeric (including complex), a string, or a
-// struct, AutoVar returns a one element Var. If data is a sequence
-// (slice, array, or pointer to array), AutoVar returns the most
-// specific of Var, VarNominal, VarOrdinal, or VarCardinal supported
-// by the sequence's elements. In any other case, AutoVar panics with
-// a *TypeError.
-//
-// XXX For single values, this should still return the most specific
-// type and only fall back to Var for things like string and struct.
+// If data is a boolean, numeric (including complex), string, or
+// struct value, AutoVar promotes it to a single element slice of that
+// value. Otherwise, data must already be a sequence (slice, array, or
+// pointer to array). AutoVar returns the most specific of Var,
+// VarNominal, VarOrdinal, or VarCardinal supported by the sequence's
+// elements. In any other case, AutoVar panics with a *TypeError.
 func AutoVar(data interface{}) Var {
 	// This could be implemented entirely in terms of public APIs,
 	// but since we're already picking apart the types, we use the
@@ -384,9 +373,6 @@ func AutoVar(data interface{}) Var {
 	case Var:
 		return data
 
-	case bool, int, int16, int32, int64, uint, uint16, uint32, uint64, uintptr, float32, float64, complex64, complex128, string:
-		return NewVar1(data)
-
 	case []float64, []int, []uint:
 		return varCardinal{varNominal{varBase{data}}}
 
@@ -394,6 +380,7 @@ func AutoVar(data interface{}) Var {
 		return varOrdinal{varNominal{varBase{data}}, nil}
 	}
 
+retry:
 	rt := reflect.TypeOf(data)
 	switch rt.Kind() {
 	case reflect.Bool,
@@ -403,7 +390,11 @@ func AutoVar(data interface{}) Var {
 		reflect.Complex64, reflect.Complex128,
 		reflect.String,
 		reflect.Struct:
-		return NewVar1(data)
+		// Promote constant values to single-valued slices.
+		s := reflect.MakeSlice(reflect.SliceOf(rt), 1, 1)
+		s.Index(0).Set(reflect.ValueOf(data))
+		data = s.Interface()
+		goto retry
 
 	case reflect.Ptr:
 		et := rt.Elem()

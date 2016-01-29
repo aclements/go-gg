@@ -64,12 +64,12 @@ func LayerPaths() Plotter {
 
 		colorb := p.getBinding("color")
 		if colorb == nil {
-			colorb = &binding{name: "color", data: NewVar1(color.Black), scale: NewIdentityScale()}
+			colorb = &binding{name: "color", data: AutoVar(color.Black), scale: NewIdentityScale()}
 		}
 
 		fill := p.getBinding("fill")
 		if fill == nil {
-			fill = &binding{name: "fill", data: NewVar1(color.Transparent), scale: NewIdentityScale()}
+			fill = &binding{name: "fill", data: AutoVar(color.Transparent), scale: NewIdentityScale()}
 		}
 
 		// TODO: Check that scales map to the right types.
