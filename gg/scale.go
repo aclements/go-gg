@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"image/color"
 	"math"
-	"os"
 	"reflect"
 
 	"github.com/aclements/go-moremath/scale"
@@ -174,7 +173,6 @@ func (s *linearScale) ExpandDomain(v Var) {
 		}
 	}
 	s.s.Min, s.s.Max = min, max
-	fmt.Fprintln(os.Stderr, "trained", min, max)
 }
 
 func (s *linearScale) Ranger(r Ranger) Ranger {
@@ -201,7 +199,6 @@ func (s *linearScale) Map(x interface{}) interface{} {
 	}
 	f64 := reflect.TypeOf(float64(0))
 	v := reflect.ValueOf(x).Convert(f64).Float()
-	fmt.Fprintln(os.Stderr, "map", v, ls.Map(v), s.r.Map(ls.Map(v)))
 	return s.r.Map(ls.Map(v))
 }
 

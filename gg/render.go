@@ -6,7 +6,6 @@ package gg
 
 import (
 	"io"
-	"log"
 	"reflect"
 
 	"github.com/aclements/go-gg/generic"
@@ -19,11 +18,9 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 	// Set scale ranges.
 	for b := range p.aesMap["x"] {
 		b.scale.Ranger(NewFloatRanger(0, float64(width)))
-		log.Println("x", b.scale.Ranger(nil))
 	}
 	for b := range p.aesMap["y"] {
 		b.scale.Ranger(NewFloatRanger(float64(height), 0))
-		log.Println("y", b.scale.Ranger(nil))
 	}
 
 	// XXX Default ranges for other things like color.
