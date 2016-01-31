@@ -421,6 +421,33 @@ retry:
 	panic(&TypeError{"gg.AutoVar", reflect.TypeOf(data), "not a Var, constant, or sequence type"})
 }
 
+// transformVar transforms the sequence in v by xform and returns a
+// new Var. The returned Var will have the same subtype as v. xform
+// must satisfy generic type func([]T) []T.
+//
+// TODO: Make this public? Or a method of Var?
+func transformVar(v Var, xform func(seq interface{}) interface{}) Var {
+	nseq := xform(v.Seq())
+
+	switch v := v.(type) {
+	case VarCardinal:
+		return NewVarCardinal(nseq)
+
+	case VarOrdinal:
+		var nlevels []int
+		if l := v.Levels(); l != nil {
+			nlevels = xform(l).([]int)
+		}
+		return NewVarOrdinal(nseq, nlevels)
+
+	case VarNominal:
+		return NewVarNominal(nseq)
+
+	default: // Var
+		return NewVar(nseq)
+	}
+}
+
 // sequence returns the reflect.Value of x that is safe to Index. x
 // must be an array, slice, or pointer to an array. If x is a pointer
 // to an array, sequence returned the dereferenced pointer. Otherwise,

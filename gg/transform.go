@@ -14,19 +14,11 @@ import (
 // TransformSort sorts the binding named by prop and permutes all
 // other bindings to match the new order of the prop binding. prop
 // must not name a VarNominal binding, since nominal variables have no
-// order.
+// order. If bindings differ in length, they are sliced or cycled to
+// the length of the prop binding.
 func TransformSort(prop string) Plotter {
-	// TODO: This needs to cycle all non-constant bindings to the
-	// length of the longest one (or maybe the length of the one
-	// being sorted? what if you sort on a constant?).
-
 	return func(p *Plot) {
 		b := p.mustGetBinding(prop)
-		if b.data.Len() <= 1 {
-			// This intentionally includes "constants"
-			// even if they aren't ordinal.
-			return
-		}
 
 		var bSorter sort.Interface
 		switch v := b.data.(type) {
@@ -41,15 +33,26 @@ func TransformSort(prop string) Plotter {
 			}
 
 		default:
-			panic("cannot sort non-ordinal variable")
+			panic(&TypeError{"gg.TransformSort", reflect.TypeOf(v), "cannot sort non-ordinal variable"})
 		}
 		if sort.IsSorted(bSorter) {
 			// Avoid sorting and re-binding everything.
+			// Cycle and slice what we have to.
+			xform := func(seq interface{}) interface{} {
+				seq = generic.Cycle(seq, b.data.Len())
+				return seq
+			}
+			for _, b2 := range p.bindings() {
+				if b2.data.Len() != b.data.Len() && b2.data.Len() > 1 {
+					nvar := transformVar(b2.data, xform)
+					p.BindWithScale(b2.name, nvar, b2.scale)
+				}
+			}
 			return
 		}
 
 		// Generate an initial permutation sequence.
-		perm := make([]int, reflect.ValueOf(b.data.(VarNominal).Seq()).Len())
+		perm := make([]int, b.data.Len())
 		for i := range perm {
 			perm[i] = i
 		}
@@ -57,32 +60,20 @@ func TransformSort(prop string) Plotter {
 		// Sort the permutation sequence using b as the key.
 		sort.Stable(&permSort{perm, bSorter})
 
-		// Shadow all bindings with sorted bindings.
-		for _, b := range p.bindings() {
-			if b.data.Len() <= 1 {
+		// Shadow all bindings with cycled and permuted bindings.
+		xform := func(seq interface{}) interface{} {
+			seq = generic.Cycle(seq, b.data.Len())
+			seq = generic.MultiIndex(seq, perm)
+			return seq
+		}
+		for _, b2 := range p.bindings() {
+			if b2.data.Len() <= 1 {
+				// No need to cycle or permute.
 				continue
 			}
 
-			var nvar Var
-			switch v := b.data.(type) {
-			case VarCardinal:
-				nvar = NewVarCardinal(generic.MultiIndex(v.Seq(), perm))
-
-			case VarOrdinal:
-				seq := generic.MultiIndex(v.Seq(), perm)
-				levels := []int(nil)
-				if l := v.Levels(); l != nil {
-					levels = generic.MultiIndex(l, perm).([]int)
-				}
-				nvar = NewVarOrdinal(seq, levels)
-
-			case VarNominal:
-				nvar = NewVarNominal(generic.MultiIndex(v.Seq(), perm))
-
-			case Var:
-				nvar = NewVar(generic.MultiIndex(v.Seq(), perm))
-			}
-			p.BindWithScale(b.name, nvar, b.scale)
+			nvar := transformVar(b2.data, xform)
+			p.BindWithScale(b2.name, nvar, b2.scale)
 		}
 	}
 }
