@@ -178,6 +178,14 @@ func (p *Plot) BindWithScale(prop string, data interface{}, scale Scaler) *Plot 
 	return p
 }
 
+func (p *Plot) unbindAll() *Plot {
+	for _, name := range p.bindings() {
+		p.env.bindings[name] = nil
+	}
+	p.env.groups = nil
+	return p
+}
+
 // TODO: Make these public. Might want to just return the name, data,
 // and scale rather than the internal struct. OTOH, that would make
 // bindings() difficult.
@@ -202,10 +210,12 @@ func (p *Plot) bindings() []string {
 	bs := make([]string, 0, len(p.env.bindings))
 	have := make(map[string]bool)
 	for e := p.env; e != nil; e = e.parent {
-		for name := range e.bindings {
+		for name, b := range e.bindings {
 			if !have[name] {
 				have[name] = true
-				bs = append(bs, name)
+				if b != nil {
+					bs = append(bs, name)
+				}
 			}
 		}
 	}
