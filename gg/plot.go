@@ -59,7 +59,9 @@ func (p *Plot) Bind(prop string, data interface{}) *Plot {
 //
 // XXX Because of things like grouping properties, "prop" isn't
 // necessarily a visual property. It's marks that interpret bindings
-// as visual properties.
+// as visual properties. To make this weirder, these non-visual
+// properties don't have sensible scales, but we force there to be one
+// anyway.
 //
 // scale may be nil. If data is a Binding with a non-nil Scales field,
 // those scales will be used. Otherwise, BindWithScale will pick a

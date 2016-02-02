@@ -16,13 +16,29 @@ import (
 )
 
 func main() {
-	xs := vec.Linspace(-10, 10, 100)
-	for i := range xs {
-		xs[i] = rand.Float64()*20 - 10
+	xs1 := vec.Linspace(-10, 10, 100)
+	for i := range xs1 {
+		xs1[i] = rand.Float64()*20 - 10
 	}
-	ys := vec.Map(math.Sin, xs)
+	ys1 := vec.Map(math.Sin, xs1)
+
+	xs2 := vec.Linspace(-10, 10, 100)
+	ys2 := vec.Map(math.Cos, xs2)
+
+	which := []string{}
+	for range xs1 {
+		which = append(which, "sin")
+	}
+	for range xs2 {
+		which = append(which, "cos")
+	}
+
+	xs := vec.Concat(xs1, xs2)
+	ys := vec.Concat(ys1, ys2)
 
 	plot := gg.NewPlot()
-	plot.Bind("x", xs).Bind("y", ys).Add(gg.LayerLines())
+	plot.Bind("x", xs).Bind("y", ys).BindWithScale("which", which, gg.NewIdentityScale())
+	plot.Add(gg.TransformGroupAuto())
+	plot.Add(gg.LayerLines())
 	plot.WriteSVG(os.Stdout, 200, 100)
 }
