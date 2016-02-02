@@ -16,17 +16,17 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 	// TODO: Perform layout.
 
 	// Set scale ranges.
-	for b := range p.aesMap["x"] {
-		b.scale.Ranger(NewFloatRanger(0, float64(width)))
+	for bg := range p.aesMap["x"] {
+		bg.Scaler.Ranger(NewFloatRanger(0, float64(width)))
 	}
-	for b := range p.aesMap["y"] {
-		b.scale.Ranger(NewFloatRanger(float64(height), 0))
+	for bg := range p.aesMap["y"] {
+		bg.Scaler.Ranger(NewFloatRanger(float64(height), 0))
 	}
 
 	// XXX Default ranges for other things like color.
 
 	// Create rendering environment.
-	env := &renderEnv{make(map[*binding]interface{})}
+	env := &renderEnv{make(map[*BindingGroup]interface{})}
 
 	// Render.
 	svg := svg.New(w)
@@ -40,35 +40,35 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 }
 
 type renderEnv struct {
-	cache map[*binding]interface{}
+	cache map[*BindingGroup]interface{}
 }
 
 // XXX
 //
 // All returned slices will be of the same length.
-func (e *renderEnv) get(b ...*binding) []interface{} {
-	out := make([]interface{}, len(b))
+func (e *renderEnv) get(bgs ...*BindingGroup) []interface{} {
+	out := make([]interface{}, len(bgs))
 	maxLen := 0
 
-	for i, b1 := range b {
-		if mapped := e.cache[b1]; mapped != nil {
+	for i, bg := range bgs {
+		if mapped := e.cache[bg]; mapped != nil {
 			out[i] = mapped
 			continue
 		}
 
-		rv := reflect.ValueOf(b1.data.Seq())
-		rt := reflect.SliceOf(b1.scale.RangeType())
+		rv := reflect.ValueOf(bg.Var.Seq())
+		rt := reflect.SliceOf(bg.Scaler.RangeType())
 		mapped := reflect.MakeSlice(rt, rv.Len(), rv.Len())
 		if rv.Len() > maxLen {
 			maxLen = rv.Len()
 		}
 		for i := 0; i < rv.Len(); i++ {
-			m1 := b1.scale.Map(rv.Index(i).Interface())
+			m1 := bg.Scaler.Map(rv.Index(i).Interface())
 			mapped.Index(i).Set(reflect.ValueOf(m1))
 		}
 
 		out[i] = mapped.Interface()
-		e.cache[b1] = out[i]
+		e.cache[bg] = out[i]
 	}
 
 	// Cycle all of the slices to the maximum length.
@@ -78,10 +78,10 @@ func (e *renderEnv) get(b ...*binding) []interface{} {
 	return out
 }
 
-func (e *renderEnv) getFirst(b *binding) interface{} {
-	rv := reflect.ValueOf(b.data.Seq())
+func (e *renderEnv) getFirst(bg *BindingGroup) interface{} {
+	rv := reflect.ValueOf(bg.Var.Seq())
 	if rv.Len() == 0 {
 		return nil
 	}
-	return b.scale.Map(rv.Index(0).Interface())
+	return bg.Scaler.Map(rv.Index(0).Interface())
 }

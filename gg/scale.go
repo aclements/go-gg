@@ -5,8 +5,6 @@
 package gg
 
 import (
-	"fmt"
-	"image/color"
 	"math"
 	"reflect"
 
@@ -99,21 +97,19 @@ type Scaler interface {
 	Map(x interface{}) interface{}
 }
 
-func DefaultScale(data interface{}) (Scaler, error) {
-	// XXX This should probably be based on the Var type.
-
-	typ := reflect.TypeOf(data)
-	if typ.Kind() == reflect.Slice {
-		typ = typ.Elem()
-	}
-	if typ.ConvertibleTo(reflect.TypeOf(float64(0))) {
+func DefaultScale(data Var) (Scaler, error) {
+	switch data.(type) {
+	case VarCardinal:
 		return NewLinearScaler(), nil
-	}
-	if typ.Implements(reflect.TypeOf(color.Color(nil))) {
+
+	case VarOrdinal, VarNominal:
+		panic("not implemented")
+
+	default: // Var
+		// TODO: This is useful for colors and such, but is it
+		// the right answer in general?
 		return NewIdentityScale(), nil
 	}
-	// TODO: Ordinal scales. Maybe custom default scales.
-	return nil, fmt.Errorf("no default scale for data of type %T", data)
 }
 
 func NewIdentityScale() Scaler {

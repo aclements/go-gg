@@ -16,7 +16,7 @@ type marker interface {
 }
 
 type markPath struct {
-	x, y, stroke, fill *binding
+	x, y, stroke, fill *BindingGroup
 }
 
 func (m *markPath) mark(env *renderEnv, canvas *svg.SVG) {
@@ -29,7 +29,7 @@ func (m *markPath) mark(env *renderEnv, canvas *svg.SVG) {
 
 	// Is the stroke constant?
 	stroke := strokes[0]
-	if m.stroke.data.Len() == 1 {
+	if m.stroke.Var.Len() == 1 {
 		strokes = nil
 	} else {
 		for _, s := range strokes {

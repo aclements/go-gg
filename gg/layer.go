@@ -47,38 +47,47 @@ func LayerLines() Plotter {
 // later.
 func LayerPaths() Plotter {
 	return func(p *Plot) {
-		// XXX Groups
-		x, y := p.mustGetBinding("x"), p.mustGetBinding("y")
-		if x.data.Len() == 0 {
-			// XXX Should this be handled at a higher level
-			// somehow? If bindings are grouped, we could
-			// eliminate zero-length groups.
-			return
+		p.Save()
+		if p.getBinding("color") == nil {
+			p.BindWithScale("color", color.Black, NewIdentityScale())
 		}
-		if x.data.Len() == 1 {
-			// TODO: Depending on the stroke cap, this
-			// *could* be well-defined.
-			Warning.Print("cannot layer path through 1 point; ignoring")
-			return
+		if p.getBinding("fill") == nil {
+			p.BindWithScale("fill", color.Transparent, NewIdentityScale())
 		}
 
-		colorb := p.getBinding("color")
-		if colorb == nil {
-			colorb = &binding{name: "color", data: AutoVar(color.Black), scale: NewIdentityScale()}
+		xb, yb := p.mustGetBinding("x"), p.mustGetBinding("y")
+		colorb := p.mustGetBinding("color")
+		fillb := p.mustGetBinding("fill")
+
+		p.Restore()
+
+		for _, gid := range p.groups() {
+			// TODO: What if x and y are different lengths?
+			switch xb[gid].Var.Len() {
+			case 0:
+				return
+
+			case 1:
+				// TODO: Depending on the stroke cap,
+				// this *could* be well-defined.
+				Warning.Print("cannot layer path through 1 point; ignoring")
+				return
+			}
+
+			// TODO: Check that scales map to the right types.
+			//checkScaleRange("LayerPaths", x, ScaleTypeReal)
+			//checkScaleRange("LayerPaths", y, ScaleTypeReal)
+			//checkScaleRange("LayerPaths", colorb, ScaleTypeColor)
+			//checkScaleRange("LayerPaths", fill, ScaleTypeColor)
+
+			p.use("x", xb[gid]).use("y", yb[gid]).
+				use("stroke", colorb[gid]).
+				use("fill", fillb[gid])
+
+			// TODO: When I register a mark, perhaps I
+			// have to include what group it belongs to so
+			// rendering knows which facet to put it in.
+			p.marks = append(p.marks, &markPath{xb[gid], yb[gid], colorb[gid], fillb[gid]})
 		}
-
-		fill := p.getBinding("fill")
-		if fill == nil {
-			fill = &binding{name: "fill", data: AutoVar(color.Transparent), scale: NewIdentityScale()}
-		}
-
-		// TODO: Check that scales map to the right types.
-		//checkScaleRange("LayerPaths", x, ScaleTypeReal)
-		//checkScaleRange("LayerPaths", y, ScaleTypeReal)
-		//checkScaleRange("LayerPaths", colorb, ScaleTypeColor)
-		//checkScaleRange("LayerPaths", fill, ScaleTypeColor)
-
-		p.use("x", x).use("y", y).use("stroke", colorb).use("fill", fill)
-		p.marks = append(p.marks, &markPath{x, y, colorb, fill})
 	}
 }

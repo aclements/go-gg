@@ -20,33 +20,23 @@ type Plot struct {
 
 	env *plotEnv
 
-	aesMap map[string]map[*binding]bool
+	aesMap map[string]map[*BindingGroup]bool
 	marks  []marker
+	used   map[*BindingGroup]bool
 }
 
 func NewPlot() *Plot {
 	p := &Plot{
-		aesMap: make(map[string]map[*binding]bool),
+		aesMap: make(map[string]map[*BindingGroup]bool),
+		used:   make(map[*BindingGroup]bool),
 	}
 	return p.Save()
 }
 
 type plotEnv struct {
 	parent   *plotEnv
-	bindings map[string]*binding
-}
-
-// A binding represents the mapping of data values (such as numeric
-// values or factors) to visual properties (such as position or
-// color) using a particular scale.
-type binding struct {
-	name  string
-	data  Var
-	scale Scaler
-
-	// used indicates that this binding is used by a mark and that
-	// scale has been trained with data.
-	used bool
+	bindings map[string]Binding
+	groups   []*GroupID
 }
 
 // Bind is shorthand for p.BindWithScale(prop, data, nil). It binds
@@ -58,41 +48,133 @@ func (p *Plot) Bind(prop string, data interface{}) *Plot {
 // BindWithScale binds "data" to visual property "prop", using the
 // specified scale to map between data values and visual values.
 //
-// data may be a Var or anything that can be accepted by AutoVar. The
-// caller must not modify data after binding it.
+// data may be a Binding, Var, or anything that can be accepted by
+// AutoVar. If data is a Binding, its groups must match those of any
+// other bindings in the Plot. If data is a Var, the Var will be bound
+// in every group (which is initially just the root group) with the
+// specified scale. If data is anything else, it will first be
+// converted to a Var using AutoVar.
+//
+// The caller must not modify data after binding it.
 //
 // XXX Because of things like grouping properties, "prop" isn't
 // necessarily a visual property. It's marks that interpret bindings
 // as visual properties.
 //
-// scale may be nil, in which case this will pick a scale. If prop is
-// of the form "𝑎_𝑏" and there is an existing binding named "𝑎", this
-// binding will inherit 𝑎's scale. This is used to make properties
-// like "y" and "y_2" map to the same scale. Otherwise, BindWithScale
-// will chose a default scale based on the type of data.
+// scale may be nil. If data is a Binding with a non-nil Scales field,
+// those scales will be used. Otherwise, BindWithScale will pick a
+// scale. If prop is of the form "𝑎_𝑏" and there is an existing
+// binding named "𝑎", this binding will inherit 𝑎's scale. This is
+// used to make properties like "y" and "y_2" map to the same scale.
+// Otherwise, BindWithScale will chose a default scale based on the
+// type of data.
 //
 // BindWithScale returns p for ease of method chaining.
+//
+// TODO: This is not commutative, since binding a Binding followed by
+// a Var could result in a non-trivial group structure, while binding
+// a Var followed by a Binding could be an error.
 func (p *Plot) BindWithScale(prop string, data interface{}, scale Scaler) *Plot {
-	if scale == nil {
+	// Promote data to a Binding.
+	var b Binding
+	checkGroups := true
+	switch data := data.(type) {
+	case Binding:
+		b = data
+
+	default:
+		v := AutoVar(data)
+		b = make(map[*GroupID]*BindingGroup)
+		for _, gid := range p.groups() {
+			b[gid] = &BindingGroup{Var: v}
+		}
+
+		// b has the right groups by construction.
+		checkGroups = false
+	}
+
+	// If this is the first binding, use its group structure.
+	if len(p.bindings()) == 0 {
+		// This is slightly subtle. Attaching the groups to
+		// the inner-most environment is safe because this
+		// environment must contain the first binding. This
+		// keeps Restoring to an empty environment working and
+		// works with unbinding.
+		p.env.groups = []*GroupID{}
+		for gid := range b {
+			p.env.groups = append(p.env.groups, gid)
+		}
+		checkGroups = false
+	}
+
+	// Check that this binding's group structure matches the other
+	// bindings.
+	if checkGroups {
+		badGroups := false
+		haveGroups := p.groups()
+		if len(haveGroups) != len(b) {
+			badGroups = true
+		} else {
+			for _, gid := range haveGroups {
+				if _, ok := b[gid]; !ok {
+					badGroups = true
+					break
+				}
+			}
+		}
+		if badGroups {
+			// TODO: More informative error.
+			panic(fmt.Sprintf("cannot bind %s; data's groups do not match other bindings", prop))
+		}
+	}
+
+	// Chose scales.
+	needScales := true
+	if scale != nil {
+		// Override any existing scales in the binding.
+		for _, gid := range p.groups() {
+			b[gid].Scaler = scale
+		}
+		needScales = false
+	} else {
+		// Do we need scales?
+		for _, bg := range b {
+			if bg.Scaler == nil {
+				needScales = true
+				break
+			}
+		}
+	}
+	if needScales {
 		if i := strings.Index(prop, "_"); i >= 0 {
 			// Find the scale of the base binding, if any.
 			scaleName := prop[:i]
-			if m := p.getBinding(scaleName); m != nil {
-				scale = m.scale
+			if b2 := p.getBinding(scaleName); b2 != nil {
+				for gid, bg := range b2 {
+					if b[gid].Scaler == nil {
+						b[gid].Scaler = bg.Scaler
+					}
+				}
 			}
+			needScales = false
 		}
 
-		if scale == nil {
+		if needScales {
 			// Choose the default scale for this data.
-			var err error
-			scale, err = DefaultScale(data)
-			if err != nil {
-				panic(err)
+			for _, bg := range b {
+				if bg.Scaler != nil {
+					continue
+				}
+				scale, err := DefaultScale(bg.Var)
+				if err != nil {
+					panic(err)
+				}
+				bg.Scaler = scale
 			}
 		}
 	}
 
-	p.env.bindings[prop] = &binding{name: prop, data: AutoVar(data), scale: scale}
+	p.env.bindings[prop] = b
 	return p
 }
 
@@ -100,34 +182,43 @@ func (p *Plot) BindWithScale(prop string, data interface{}, scale Scaler) *Plot 
 // and scale rather than the internal struct. OTOH, that would make
 // bindings() difficult.
 
-func (p *Plot) getBinding(name string) *binding {
+func (p *Plot) getBinding(name string) Binding {
 	for e := p.env; e != nil; e = e.parent {
-		if m, ok := e.bindings[name]; ok {
-			return m
+		if b, ok := e.bindings[name]; ok {
+			return b
 		}
 	}
 	return nil
 }
 
-func (p *Plot) mustGetBinding(name string) *binding {
+func (p *Plot) mustGetBinding(name string) Binding {
 	if b := p.getBinding(name); b != nil {
 		return b
 	}
 	panic(fmt.Sprintf("unknown binding %q", name))
 }
 
-func (p *Plot) bindings() []*binding {
-	bs := make([]*binding, 0, len(p.env.bindings))
+func (p *Plot) bindings() []string {
+	bs := make([]string, 0, len(p.env.bindings))
 	have := make(map[string]bool)
 	for e := p.env; e != nil; e = e.parent {
-		for name, b := range e.bindings {
+		for name := range e.bindings {
 			if !have[name] {
 				have[name] = true
-				bs = append(bs, b)
+				bs = append(bs, name)
 			}
 		}
 	}
 	return bs
+}
+
+func (p *Plot) groups() []*GroupID {
+	for e := p.env; e != nil; e = e.parent {
+		if e.groups != nil {
+			return e.groups
+		}
+	}
+	return []*GroupID{RootGroupID}
 }
 
 // use marks a binding as in-use by a mark and attaches it to a
@@ -135,20 +226,20 @@ func (p *Plot) bindings() []*binding {
 // the binding's scale.
 //
 // TODO: Should aes be an enum?
-func (p *Plot) use(aes string, b *binding) *Plot {
+func (p *Plot) use(aes string, g *BindingGroup) *Plot {
 	// Train the scale.
-	if !b.used {
-		b.scale.ExpandDomain(b.data)
-		b.used = true
+	if !p.used[g] {
+		g.Scaler.ExpandDomain(g.Var)
+		p.used[g] = true
 	}
 
 	// Add it to the aesthetic mappings.
 	am := p.aesMap[aes]
 	if am == nil {
-		am = make(map[*binding]bool)
+		am = make(map[*BindingGroup]bool)
 		p.aesMap[aes] = am
 	}
-	am[b] = true
+	am[g] = true
 
 	return p
 }
@@ -159,7 +250,7 @@ func (p *Plot) use(aes string, b *binding) *Plot {
 // in the scope and existing bindings can be shadowed by new bindings
 // of the same name.
 func (p *Plot) Save() *Plot {
-	p.env = &plotEnv{parent: p.env, bindings: make(map[string]*binding)}
+	p.env = &plotEnv{parent: p.env, bindings: make(map[string]Binding)}
 	return p
 }
 
@@ -170,6 +261,7 @@ func (p *Plot) Restore() *Plot {
 		panic("unbalanced Save/Restore")
 	}
 	p.env = p.env.parent
+	// TODO: Clear unwound bindings from p.used.
 	return p
 }
 
