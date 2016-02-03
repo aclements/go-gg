@@ -22,11 +22,7 @@ func Cycle(seq interface{}, length int) interface{} {
 	}
 
 	// Allocate a new slice of the appropriate length.
-	ot := rv.Type()
-	if rv.Kind() == reflect.Array {
-		ot = reflect.SliceOf(ot.Elem())
-	}
-	out := reflect.MakeSlice(ot, length, length)
+	out := newSequence(rv.Type(), length, length)
 
 	// Copy elements to out.
 	for pos := 0; pos < length; {
