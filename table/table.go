@@ -54,10 +54,10 @@ type Table struct {
 // Visually, a Grouping can be thought of as follows:
 //
 //	   Col A  Col B  Col C
-//	------- group a ------
+//	------ group /a ------
 //	0   5.4    "x"     90
 //	1   -.2    "y"     30
-//	------- group b ------
+//	------ group /b ------
 //	0   9.3    "a"     10
 //
 // Like a Table, a Grouping's structure is immutable. To construct a

@@ -25,26 +25,24 @@ type groupNode struct {
 	label  string
 }
 
-// String returns the labels of the path to GroupID g, separated by
-// "/"s. If g is RootGroupID, it returns "/". Note that this is purely
+// String returns the path to GroupID g in the form "/l1/l2/l3". If g
+// is RootGroupID, it returns "/". Note that this is purely
 // diagnostic; this string may not uniquely identify g.
 func (g GroupID) String() string {
 	if g == RootGroupID {
 		return "/"
 	}
-	buflen := -1
+	buflen := 0
 	for p := g; p != RootGroupID; p = p.parent {
 		buflen += len(p.label) + 1
 	}
 	buf := make([]byte, buflen)
 	bufpos := len(buf)
 	for p := g; p != RootGroupID; p = p.parent {
-		if p != g {
-			bufpos--
-			buf[bufpos] = '/'
-		}
 		bufpos -= len(p.label)
 		copy(buf[bufpos:], p.label)
+		bufpos--
+		buf[bufpos] = '/'
 	}
 	return string(buf)
 }
