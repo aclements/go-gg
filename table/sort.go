@@ -15,11 +15,11 @@ import (
 // that order. Otherwise, the values in the column must be naturally
 // ordered (their types must be orderable by the Go specification). If
 // neither is true, Sort panics with a *generic.TypeError.
-func Sort(g Grouped, col string) Grouped {
+func Sort(g Grouping, col string) Grouping {
 	// TODO: Consider a generic MapConcatGroups.
 
 	// Sort each group.
-	out := Grouped(new(Table))
+	out := Grouping(new(Table))
 	for _, gid := range g.Groups() {
 		t := g.Table(gid)
 		seq := t.MustColumn(col)

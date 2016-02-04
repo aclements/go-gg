@@ -70,7 +70,7 @@ func (g GroupID) Parent() GroupID {
 // group have equal values for all of the named columns. The relative
 // order of rows with equal values for the named columns is
 // maintained.
-func GroupBy(g Grouped, cols ...string) Grouped {
+func GroupBy(g Grouping, cols ...string) Grouping {
 	// TODO: This would generate much less garbage if we grouped
 	// all of cols in one pass.
 
@@ -78,7 +78,7 @@ func GroupBy(g Grouped, cols ...string) Grouped {
 		return g
 	}
 
-	out := Grouped(new(Table))
+	out := Grouping(new(Table))
 	for _, gid := range g.Groups() {
 		t := g.Table(gid)
 		c := t.MustColumn(cols[0])
@@ -115,7 +115,7 @@ func GroupBy(g Grouped, cols ...string) Grouped {
 }
 
 // Flatten concatenates all of the groups in g into a single Table.
-func Flatten(g Grouped) *Table {
+func Flatten(g Grouping) *Table {
 	groups := g.Groups()
 	switch len(groups) {
 	case 0:

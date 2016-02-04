@@ -4,21 +4,21 @@
 
 // Package table implements ordered, grouped two dimensional relations.
 //
-// There are two related abstractions: Table and Grouped.
+// There are two related abstractions: Table and Grouping.
 //
 // A Table is an ordered relation of rows and columns. Each column is
 // a Go slice and hence must be homogeneously typed, but different
 // columns may have different types. All columns in a Table have the
 // same number of rows.
 //
-// A Grouped generalizes a Table by grouping the Table's rows into
-// zero or more groups. A Table is itself a Grouped with zero or one
-// groups. Most operations take a Grouped and operate on each group
+// A Grouping generalizes a Table by grouping the Table's rows into
+// zero or more groups. A Table is itself a Grouping with zero or one
+// groups. Most operations take a Grouping and operate on each group
 // independently, though some operations sub-divide or combine groups.
 //
-// The structures of both Tables and Groupeds are immutable. Adding a
+// The structures of both Tables and Groupings are immutable. Adding a
 // column to a Table returns a new Table and adding a new Table to a
-// Grouped returns a new Grouped.
+// Grouping returns a new Grouping.
 package table
 
 import (
@@ -36,7 +36,7 @@ import (
 // columns. Note that a Table may have one or more columns, but no
 // rows; such a Table is *not* considered empty.
 //
-// A Table is also a trivial Grouped. If a Table is empty, it has no
+// A Table is also a trivial Grouping. If a Table is empty, it has no
 // groups and hence the zero value of Table is also the "empty group".
 // Otherwise, it consists only of the root group, RootGroupID.
 //
@@ -48,10 +48,10 @@ type Table struct {
 	len      int
 }
 
-// A Grouped is a set of tables with identical sets of columns, each
+// A Grouping is a set of tables with identical sets of columns, each
 // identified by a distinct GroupID.
 //
-// Visually, a Grouped can be thought of as follows:
+// Visually, a Grouping can be thought of as follows:
 //
 //	   Col A  Col B  Col C
 //	------- group a ------
@@ -60,21 +60,21 @@ type Table struct {
 //	------- group b ------
 //	0   9.3    "a"     10
 //
-// Like a Table, a Grouped's structure is immutable. To construct a
-// Grouped, start with a Table (typically the empty Table, which is
-// also the empty Grouped) and add tables to it using AddTable.
+// Like a Table, a Grouping's structure is immutable. To construct a
+// Grouping, start with a Table (typically the empty Table, which is
+// also the empty Grouping) and add tables to it using AddTable.
 //
-// Despite the fact that GroupIDs form a hierarchy, a Grouped ignores
+// Despite the fact that GroupIDs form a hierarchy, a Grouping ignores
 // this hierarchy and simply operates on a flat map of distinct
 // GroupIDs to Tables.
-type Grouped interface {
-	// Columns returns the names of the columns in this Grouped,
+type Grouping interface {
+	// Columns returns the names of the columns in this Grouping,
 	// or nil if there are no Tables or the group consists solely
-	// of empty Tables. All Tables in this Grouped have the same
+	// of empty Tables. All Tables in this Grouping have the same
 	// set of columns.
 	Columns() []string
 
-	// Groups returns the IDs of the groups in this Grouped.
+	// Groups returns the IDs of the groups in this Grouping.
 	Groups() []GroupID
 
 	// Table returns the Table in group gid, or nil if there is no
@@ -82,8 +82,8 @@ type Grouped interface {
 	Table(gid GroupID) *Table
 
 	// AddTable reparents Table t into group gid and returns a new
-	// Grouped with the addition of Table t bound to group gid. If
-	// t is the empty Table, this is a no-op because the empty
+	// Grouping with the addition of Table t bound to group gid.
+	// If t is the empty Table, this is a no-op because the empty
 	// Table contains no groups. Otherwise, if group gid already
 	// exists, it is first removed. Table t must have the same set
 	// of columns as any existing Tables in this group or AddTable
@@ -93,9 +93,9 @@ type Grouped interface {
 	// that I never use the sequence (except maybe for printing),
 	// perhaps it doesn't matter.
 	//
-	// TODO This doesn't make it easy to combine two Groupeds. It
-	// could instead take a Grouped and reparent it.
-	AddTable(gid GroupID, t *Table) Grouped
+	// TODO This doesn't make it easy to combine two Groupings. It
+	// could instead take a Grouping and reparent it.
+	AddTable(gid GroupID, t *Table) Grouping
 }
 
 type groupedTable struct {
@@ -198,13 +198,13 @@ func (t *Table) Table(gid GroupID) *Table {
 	return nil
 }
 
-// AddTable returns a Grouped with up to two groups: first, t, if
+// AddTable returns a Grouping with up to two groups: first, t, if
 // non-empty, is bound to RootGroupID; then t2, if non-empty, is bound
 // to group gid.
 //
-// Typically this is used to build up a Grouped by starting with an
+// Typically this is used to build up a Grouping by starting with an
 // empty Table and adding Tables to it.
-func (t *Table) AddTable(gid GroupID, t2 *Table) Grouped {
+func (t *Table) AddTable(gid GroupID, t2 *Table) Grouping {
 	if t2.cols == nil {
 		return t
 	} else if gid == RootGroupID || t.cols == nil {
@@ -231,7 +231,7 @@ func (g *groupedTable) Table(gid GroupID) *Table {
 	return g.tables[gid]
 }
 
-func (g *groupedTable) AddTable(gid GroupID, t *Table) Grouped {
+func (g *groupedTable) AddTable(gid GroupID, t *Table) Grouping {
 	// TODO: Currently adding N tables is O(N^2).
 
 	if t.cols == nil {
