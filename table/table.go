@@ -4,7 +4,7 @@
 
 // Package table implements ordered, grouped two dimensional relations.
 //
-// Package table provides two related abstractions: Table and Grouped.
+// There are two related abstractions: Table and Grouped.
 //
 // A Table is an ordered relation of rows and columns. Each column is
 // a Go slice and hence must be homogeneously typed, but different
@@ -12,13 +12,13 @@
 // same number of rows.
 //
 // A Grouped generalizes a Table by grouping the Table's rows into
-// zero or more groups. A Table is itself a Grouped with only one
-// group. Most operations take a Grouped and operate on each group
+// zero or more groups. A Table is itself a Grouped with zero or one
+// groups. Most operations take a Grouped and operate on each group
 // independently, though some operations sub-divide or combine groups.
 //
 // The structures of both Tables and Groupeds are immutable. Adding a
-// column to a Table returns a new Table and adding a new Table
-// (group) to a Grouped returns a new Grouped.
+// column to a Table returns a new Table and adding a new Table to a
+// Grouped returns a new Grouped.
 package table
 
 import (
@@ -32,10 +32,13 @@ import (
 // set of named columns, where each column is a sequence of values of
 // a consistent type and all columns have the same length.
 //
-// A Table is also a trivial Grouped consisting of only a root group.
+// The zero value of Table is the "empty table": it has no rows and no
+// columns. Note that a Table may have one or more columns, but no
+// rows; such a Table is *not* considered empty.
 //
-// The zero value of Table is an empty table with no rows and no
-// columns.
+// A Table is also a trivial Grouped. If a Table is empty, it has no
+// groups and hence the zero value of Table is also the "empty group".
+// Otherwise, it consists only of the root group, RootGroupID.
 //
 // A Table's structure is immutable. To construct a Table, start with
 // an empty table and add columns to it using Add.
@@ -45,11 +48,6 @@ type Table struct {
 	len      int
 }
 
-// TODO: Could I arrange this so that an empty table is also the empty
-// group? That would require tweaking what it means to add an empty
-// Table to a group and also tweaking what groups an Empty table
-// contains.
-
 // A Grouped is a set of tables with identical sets of columns, each
 // identified by a distinct GroupID.
 //
@@ -57,14 +55,14 @@ type Table struct {
 //
 //	   Col A  Col B  Col C
 //	------- group a ------
-//	1   5.4    "x"     90
-//	2   -.2    "y"     30
+//	0   5.4    "x"     90
+//	1   -.2    "y"     30
 //	------- group b ------
-//	1   9.3    "a"     10
+//	0   9.3    "a"     10
 //
 // Like a Table, a Grouped's structure is immutable. To construct a
-// Grouped, start with either an EmptyGrouped or a *Table and add
-// tables to it using AddTable.
+// Grouped, start with a Table (typically the empty Table, which is
+// also the empty Grouped) and add tables to it using AddTable.
 //
 // Despite the fact that GroupIDs form a hierarchy, a Grouped ignores
 // this hierarchy and simply operates on a flat map of distinct
@@ -83,10 +81,13 @@ type Grouped interface {
 	// such Table.
 	Table(gid GroupID) *Table
 
-	// AddTable returns a new Grouped with Table t bound to group
-	// gid. If this group already exists, it is first removed.
-	// Table t must have the same set of columns as any existing
-	// Tables in this group or AddTable will panic.
+	// AddTable reparents Table t into group gid and returns a new
+	// Grouped with the addition of Table t bound to group gid. If
+	// t is the empty Table, this is a no-op because the empty
+	// Table contains no groups. Otherwise, if group gid already
+	// exists, it is first removed. Table t must have the same set
+	// of columns as any existing Tables in this group or AddTable
+	// will panic.
 	//
 	// TODO The same set or the same sequence of columns? Given
 	// that I never use the sequence (except maybe for printing),
@@ -103,22 +104,10 @@ type groupedTable struct {
 	colNames []string
 }
 
-// EmptyGrouped is a Grouped with no tables.
-var EmptyGrouped = emptyGrouped()
-
-func emptyGrouped() *groupedTable {
-	// Hide this initializer from the documentation.
-	return &groupedTable{
-		tables:   map[GroupID]*Table{},
-		groups:   []GroupID{},
-		colNames: nil,
-	}
-}
-
 // A Slice is a Go slice value.
 //
 // This is primarily for documentation. There is no way to statically
-// enforce this in Go; however, operations that expect a Slice will
+// enforce this in Go; however, functions that expect a Slice will
 // panic with a *generic.TypeError if passed a non-slice value.
 type Slice interface{}
 
@@ -191,31 +180,43 @@ func (t *Table) MustColumn(name string) Slice {
 	panic("unknown column: " + name)
 }
 
-// Groups returns only RootGroupID, since a Table is a Grouped
-// consisting of a single group.
+// Groups returns the groups in this Table. If t is empty, there are
+// no groups. Otherwise, there is only RootGroupID.
 func (t *Table) Groups() []GroupID {
+	if t.cols == nil {
+		return []GroupID{}
+	}
 	return []GroupID{RootGroupID}
 }
 
-// Table returns t if gid is RootGroupID; otherwise it returns nil.
+// Table returns t if gid is RootGroupID and t is not empty; otherwise
+// it returns nil.
 func (t *Table) Table(gid GroupID) *Table {
-	if gid == RootGroupID {
+	if gid == RootGroupID && t.cols != nil {
 		return t
 	}
 	return nil
 }
 
-// AddTable returns a Grouped with at most two groups: t in
-// RootGroupID and t2 in group gid. If gid is RootGroupID, this
-// returns a Grouped consisting only of t2.
+// AddTable returns a Grouped with up to two groups: first, t, if
+// non-empty, is bound to RootGroupID; then t2, if non-empty, is bound
+// to group gid.
 //
-// This exists so Table satisfies Grouped. Typically Grouped tables
-// should be built starting from EmptyGrouped.
+// Typically this is used to build up a Grouped by starting with an
+// empty Table and adding Tables to it.
 func (t *Table) AddTable(gid GroupID, t2 *Table) Grouped {
-	if gid == RootGroupID {
-		return EmptyGrouped.AddTable(gid, t2)
+	if t2.cols == nil {
+		return t
+	} else if gid == RootGroupID || t.cols == nil {
+		return t2
 	}
-	return EmptyGrouped.AddTable(RootGroupID, t).AddTable(gid, t2)
+
+	g := &groupedTable{
+		tables:   map[GroupID]*Table{},
+		groups:   []GroupID{},
+		colNames: nil,
+	}
+	return g.AddTable(RootGroupID, t).AddTable(gid, t2)
 }
 
 func (g *groupedTable) Columns() []string {
@@ -232,6 +233,11 @@ func (g *groupedTable) Table(gid GroupID) *Table {
 
 func (g *groupedTable) AddTable(gid GroupID, t *Table) Grouped {
 	// TODO: Currently adding N tables is O(N^2).
+
+	if t.cols == nil {
+		// Adding an empty table has no effect.
+		return g
+	}
 
 	// Create the new grouped table, removing any existing table
 	// with the same GID.

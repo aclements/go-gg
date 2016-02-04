@@ -19,7 +19,7 @@ func Sort(g Grouped, col string) Grouped {
 	// TODO: Consider a generic MapConcatGroups.
 
 	// Sort each group.
-	out := EmptyGrouped
+	out := Grouped(new(Table))
 	for _, gid := range g.Groups() {
 		t := g.Table(gid)
 		seq := t.MustColumn(col)

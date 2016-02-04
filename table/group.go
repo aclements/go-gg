@@ -78,7 +78,7 @@ func GroupBy(g Grouped, cols ...string) Grouped {
 		return g
 	}
 
-	out := new(Table)
+	out := Grouped(new(Table))
 	for _, gid := range g.Groups() {
 		t := g.Table(gid)
 		c := t.MustColumn(cols[0])
@@ -107,7 +107,7 @@ func GroupBy(g Grouped, cols ...string) Grouped {
 				seq = generic.MultiIndex(seq, rows)
 				subgroup = subgroup.Add(name, seq)
 			}
-			out.AddTable(subgid, subgroup)
+			out = out.AddTable(subgid, subgroup)
 		}
 	}
 
