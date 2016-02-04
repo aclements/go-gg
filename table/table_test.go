@@ -14,7 +14,10 @@ import (
 var xgid = RootGroupID.Extend("xgid")
 
 func isEmpty(g Grouping) bool {
-	return g.Columns() == nil
+	if t, _ := g.(*Table); t != nil && t.Len() != 0 {
+		return false
+	}
+	return g.Columns() == nil && len(g.Groups()) == 0
 }
 
 func de(x, y interface{}) bool {
@@ -104,6 +107,12 @@ func TestTable0(t *testing.T) {
 		tab.Add("y", []int{1})
 	})
 	tab.Add("y", []int{})
+	if v := tab.Add("x", nil); !isEmpty(v) {
+		t.Fatalf("tab.Add(\"x\", nil) should be the empty table; got %v", v)
+	}
+	if v := tab.Add("y", nil); !equal(v, tab) {
+		t.Fatalf("tab.Add(\"y\", nil) should be %v; got %v", tab, v)
+	}
 	if v := tab.Len(); v != 0 {
 		t.Fatalf("tab.Len() should be 0; got %v", v)
 	}
@@ -144,6 +153,12 @@ func TestTable1(t *testing.T) {
 		tab.Add("y", []int{1, 2})
 	})
 	tab.Add("y", []int{1})
+	if v := tab.Add("x", nil); !isEmpty(v) {
+		t.Fatalf("tab.Add(\"x\", nil) should be the empty table; got %v", v)
+	}
+	if v := tab.Add("y", nil); !equal(v, tab) {
+		t.Fatalf("tab.Add(\"y\", nil) should be %v; got %v", tab, v)
+	}
 	if v := tab.Len(); v != 1 {
 		t.Fatalf("tab.Len() should be 1; got %v", v)
 	}
@@ -213,5 +228,20 @@ func TestAddTable(t *testing.T) {
 	}
 	if v := tab01.AddTable(RootGroupID, new(Table)); !equal(tab01, v) {
 		t.Fatalf("tab01.AddTable(RootGroupID, empty) should be tab01; got %v", v)
+	}
+
+	if v := tab0.AddTable(RootGroupID, nil); !isEmpty(v) {
+		t.Fatalf("tab0.AddTable(RootGroupID, nil) should be empty; got %v", v)
+	}
+	if v := tab0.AddTable(xgid, nil); !equal(tab0, v) {
+		t.Fatalf("tab0.AddTable(xgid, nil) should be tab0; got %v", v)
+	}
+
+	tab0x := tab01.AddTable(xgid, nil)
+	if !equal(tab0x, tab0) {
+		t.Fatalf("tab01.AddTable(xgid, nil) should be tab0; got %v", tab0x)
+	}
+	if v := tab0x.AddTable(RootGroupID, nil); !isEmpty(v) {
+		t.Fatalf("tab0x.AddTable(RootGroupID, nil) should be empty; got %v", v)
 	}
 }

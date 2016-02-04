@@ -83,11 +83,13 @@ type Grouping interface {
 
 	// AddTable reparents Table t into group gid and returns a new
 	// Grouping with the addition of Table t bound to group gid.
-	// If t is the empty Table, this is a no-op because the empty
-	// Table contains no groups. Otherwise, if group gid already
-	// exists, it is first removed. Table t must have the same set
-	// of columns as any existing Tables in this group or AddTable
-	// will panic.
+	// If t is nil, this returns a Grouping with group gid
+	// removed. If t is the empty Table, this is a no-op because
+	// the empty Table contains no groups. Otherwise, AddTable
+	// first removes group gid if it already exists, and then adds
+	// t as a new group. Table t must have the same set of columns
+	// as any existing Tables in this group or AddTable will
+	// panic.
 	//
 	// TODO The same set or the same sequence of columns? Given
 	// that I never use the sequence (except maybe for printing),
@@ -119,18 +121,16 @@ func reflectSlice(s Slice) reflect.Value {
 	return rv
 }
 
-// Add returns a new Table with a new column bound to data. If Table t
-// already has a column with the same name, it is first removed. data
-// must have the same length as any existing columns or Add will
-// panic.
+// Add returns a new Table with a new column bound to data, or removes
+// the named column if data is nil. If Table t already has a column
+// with the given name, Add first removes it. Then, if data is
+// non-nil, Add adds a new column. If data is non-nil, it must have
+// the same length as any existing columns or Add will panic.
 func (t *Table) Add(name string, data Slice) *Table {
 	// TODO: Currently adding N columns is O(N^2). If we built the
 	// column index only when it was asked for, the usual case of
 	// adding a bunch of columns and then using the final table
 	// would be O(N).
-
-	rv := reflectSlice(data)
-	dataLen := rv.Len()
 
 	// Create the new table, removing any existing column with the
 	// same name.
@@ -141,6 +141,16 @@ func (t *Table) Add(name string, data Slice) *Table {
 			nt.colNames = append(nt.colNames, name2)
 		}
 	}
+	if data == nil {
+		// Remove the column.
+		if len(nt.cols) == 0 {
+			*nt = Table{}
+		}
+		return nt
+	}
+
+	rv := reflectSlice(data)
+	dataLen := rv.Len()
 	if len(nt.cols) == 0 {
 		nt.cols[name] = data
 		nt.colNames = append(nt.colNames, name)
@@ -205,7 +215,12 @@ func (t *Table) Table(gid GroupID) *Table {
 // Typically this is used to build up a Grouping by starting with an
 // empty Table and adding Tables to it.
 func (t *Table) AddTable(gid GroupID, t2 *Table) Grouping {
-	if t2.cols == nil {
+	if t2 == nil {
+		if gid == RootGroupID {
+			return new(Table)
+		}
+		return t
+	} else if t2.cols == nil {
 		return t
 	} else if gid == RootGroupID || t.cols == nil {
 		return t2
@@ -234,7 +249,7 @@ func (g *groupedTable) Table(gid GroupID) *Table {
 func (g *groupedTable) AddTable(gid GroupID, t *Table) Grouping {
 	// TODO: Currently adding N tables is O(N^2).
 
-	if t.cols == nil {
+	if t != nil && t.cols == nil {
 		// Adding an empty table has no effect.
 		return g
 	}
@@ -248,6 +263,13 @@ func (g *groupedTable) AddTable(gid GroupID, t *Table) Grouping {
 			ng.groups = append(ng.groups, gid2)
 		}
 	}
+	if t == nil {
+		if len(ng.groups) == 0 {
+			ng.colNames = nil
+		}
+		return ng
+	}
+
 	if len(ng.groups) == 0 {
 		ng.tables[gid] = t
 		ng.groups = append(ng.groups, gid)
