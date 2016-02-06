@@ -112,7 +112,36 @@ func GroupBy(g Grouping, cols ...string) Grouping {
 	return GroupBy(out, cols[1:]...)
 }
 
+// Ungroup concatenates adjacent Tables in g that share a group parent
+// into a Table identified by the parent, undoing the effects of the
+// most recent GroupBy operation.
+func Ungroup(g Grouping) Grouping {
+	groups := g.Tables()
+	if len(groups) == 0 || len(groups) == 1 && groups[0] == RootGroupID {
+		return g
+	}
+
+	out := Grouping(new(Table))
+	runGid := groups[0].Parent()
+	runTabs := []*Table{}
+	for _, gid := range groups {
+		if gid.Parent() != runGid {
+			// Flush the run.
+			out = out.AddTable(runGid, concatRows(runTabs...))
+
+			runGid = gid.Parent()
+			runTabs = runTabs[:0]
+		}
+		runTabs = append(runTabs, g.Table(gid))
+	}
+	// Flush the last run.
+	out = out.AddTable(runGid, concatRows(runTabs...))
+
+	return out
+}
+
 // Flatten concatenates all of the groups in g into a single Table.
+// This is equivalent to repeatedly Ungrouping g.
 func Flatten(g Grouping) *Table {
 	groups := g.Tables()
 	switch len(groups) {
@@ -123,17 +152,39 @@ func Flatten(g Grouping) *Table {
 		return g.Table(groups[0])
 	}
 
+	tabs := make([]*Table, len(groups))
+	for i, gid := range groups {
+		tabs[i] = g.Table(gid)
+	}
+
+	return concatRows(tabs...)
+}
+
+// concatRows concatenates the rows of tabs into a single Table. All
+// Tables in tabs must all have the same column set.
+func concatRows(tabs ...*Table) *Table {
+	// TODO: Consider making this public. It would have to check
+	// the columns, and we would probably also want a concatCols.
+
+	switch len(tabs) {
+	case 0:
+		return new(Table)
+
+	case 1:
+		return tabs[0]
+	}
+
 	// Construct each column.
 	out := new(Table)
-	seqs := make([]reflect.Value, len(g.Tables()))
-	for _, col := range g.Columns() {
+	seqs := make([]reflect.Value, len(tabs))
+	for _, col := range tabs[0].Columns() {
 		seqs = seqs[:0]
-		for _, gid := range groups {
-			seqs = append(seqs, reflect.ValueOf(g.Table(gid).Column(col)))
+		for _, tab := range tabs {
+			seqs = append(seqs, reflect.ValueOf(tab.Column(col)))
 		}
 		nilSeq := reflect.Zero(reflect.TypeOf(seqs[0]))
 		newSeq := reflect.Append(nilSeq, seqs...)
-		out.Add(col, newSeq)
+		out = out.Add(col, newSeq)
 	}
 
 	return out
