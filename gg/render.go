@@ -8,25 +8,28 @@ import (
 	"io"
 	"reflect"
 
-	"github.com/aclements/go-gg/generic"
+	"github.com/aclements/go-gg/table"
 	"github.com/ajstarks/svgo"
 )
 
 func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 	// TODO: Perform layout.
 
+	// TODO: Check if the same scaler is used for multiple
+	// aesthetics with conflicting rangers.
+
 	// Set scale ranges.
-	for bg := range p.aesMap["x"] {
-		bg.Scaler.Ranger(NewFloatRanger(0, float64(width)))
+	for vis := range p.aesMap["x"] {
+		vis.scaler.Ranger(NewFloatRanger(0, float64(width)))
 	}
-	for bg := range p.aesMap["y"] {
-		bg.Scaler.Ranger(NewFloatRanger(float64(height), 0))
+	for vis := range p.aesMap["y"] {
+		vis.scaler.Ranger(NewFloatRanger(float64(height), 0))
 	}
 
 	// XXX Default ranges for other things like color.
 
 	// Create rendering environment.
-	env := &renderEnv{make(map[*BindingGroup]interface{})}
+	env := &renderEnv{make(map[*visual]table.Slice)}
 
 	// Render.
 	svg := svg.New(w)
@@ -40,48 +43,44 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 }
 
 type renderEnv struct {
-	cache map[*BindingGroup]interface{}
+	cache map[*visual]table.Slice
 }
 
-// XXX
-//
-// All returned slices will be of the same length.
-func (e *renderEnv) get(bgs ...*BindingGroup) []interface{} {
-	out := make([]interface{}, len(bgs))
-	maxLen := 0
-
-	for i, bg := range bgs {
-		if mapped := e.cache[bg]; mapped != nil {
-			out[i] = mapped
-			continue
-		}
-
-		rv := reflect.ValueOf(bg.Var.Seq())
-		rt := reflect.SliceOf(bg.Scaler.RangeType())
-		mapped := reflect.MakeSlice(rt, rv.Len(), rv.Len())
-		if rv.Len() > maxLen {
-			maxLen = rv.Len()
-		}
-		for i := 0; i < rv.Len(); i++ {
-			m1 := bg.Scaler.Map(rv.Index(i).Interface())
-			mapped.Index(i).Set(reflect.ValueOf(m1))
-		}
-
-		out[i] = mapped.Interface()
-		e.cache[bg] = out[i]
-	}
-
-	// Cycle all of the slices to the maximum length.
-	for i, s := range out {
-		out[i] = generic.Cycle(s, maxLen)
-	}
-	return out
+type visual struct {
+	seq    table.Slice
+	scaler Scaler
 }
 
-func (e *renderEnv) getFirst(bg *BindingGroup) interface{} {
-	rv := reflect.ValueOf(bg.Var.Seq())
+func (v *visual) get(env *renderEnv) table.Slice {
+	if mapped := env.cache[v]; mapped != nil {
+		return mapped
+	}
+
+	rv := reflect.ValueOf(v.seq)
+	rt := reflect.SliceOf(v.scaler.RangeType())
+	mv := reflect.MakeSlice(rt, rv.Len(), rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		m1 := v.scaler.Map(rv.Index(i).Interface())
+		mv.Index(i).Set(reflect.ValueOf(m1))
+	}
+
+	mapped := mv.Interface()
+	env.cache[v] = mapped
+	return mapped
+}
+
+func (v *visual) getFirst(env *renderEnv) interface{} {
+	if mapped := env.cache[v]; mapped != nil {
+		mv := reflect.ValueOf(mapped)
+		if mv.Len() == 0 {
+			return nil
+		}
+		return mv.Index(0).Interface()
+	}
+
+	rv := reflect.ValueOf(v.seq)
 	if rv.Len() == 0 {
 		return nil
 	}
-	return bg.Scaler.Map(rv.Index(0).Interface())
+	return v.scaler.Map(rv.Index(0).Interface())
 }

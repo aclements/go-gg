@@ -8,6 +8,8 @@ import "reflect"
 
 // XXX I'm not sure how useful Method is here. See generic.TypeError.
 
+// XXX Perhaps I should just use generic.TypeError.
+
 type TypeError struct {
 	Method string
 	Type   reflect.Type

@@ -5,9 +5,13 @@
 package gg
 
 import (
+	"fmt"
+	"image/color"
 	"math"
 	"reflect"
 
+	"github.com/aclements/go-gg/generic"
+	"github.com/aclements/go-gg/table"
 	"github.com/aclements/go-moremath/scale"
 )
 
@@ -58,7 +62,7 @@ import (
 type Scaler interface {
 	// XXX
 
-	ExpandDomain(Var)
+	ExpandDomain(table.Slice)
 
 	// Ranger sets this Scaler's output range if r is non-nil and
 	// returns the previous continuous range. This makes the range
@@ -97,19 +101,104 @@ type Scaler interface {
 	Map(x interface{}) interface{}
 }
 
-func DefaultScale(data Var) (Scaler, error) {
-	switch data.(type) {
-	case VarCardinal:
+var float64Type = reflect.TypeOf(float64(0))
+var colorType = reflect.TypeOf((*color.Color)(nil)).Elem()
+
+var canCardinal = map[reflect.Kind]bool{
+	reflect.Float32: true,
+	reflect.Float64: true,
+	reflect.Int:     true,
+	reflect.Int8:    true,
+	reflect.Int16:   true,
+	reflect.Int32:   true,
+	reflect.Int64:   true,
+	reflect.Uint:    true,
+	reflect.Uintptr: true,
+	reflect.Uint8:   true,
+	reflect.Uint16:  true,
+	reflect.Uint32:  true,
+	reflect.Uint64:  true,
+}
+
+func isCardinal(k reflect.Kind) bool {
+	// XXX Move this to generic.IsCardinalR and rename CanOrderR
+	// to IsOrderedR. Does complex count? It supports most
+	// arithmetic operators. Maybe cardinal is a plot concept and
+	// not a generic concept? If sort.Interface influences this,
+	// this may need to be a question about a Slice, not a
+	// reflect.Kind.
+	return canCardinal[k]
+}
+
+// sliceToFloat64 converts s to a []float64. s must have type []T
+// where T is integral or floating point. It panics with a
+// *generic.TypeError if s does not have the right type.
+//
+// TODO: Make this public? Perhaps in a type utilities package (with
+// isCardinal?) since it's for extending gg more than using it? Or put
+// it in generic (perhaps make DeepConvert actually work)?
+func sliceToFloat64(s table.Slice) []float64 {
+	// []float64
+	if ss, ok := s.([]float64); ok {
+		return ss
+	}
+
+	// Everything else needs a copy conversion.
+	rv := reflect.ValueOf(s)
+	if rv.Kind() != reflect.Slice || !isCardinal(rv.Type().Elem().Kind()) {
+		panic(&generic.TypeError{rv.Type(), nil, "is not []T where T is integral or floating point"})
+	}
+
+	out := make([]float64, rv.Len())
+	switch rv.Type().Elem().Kind() {
+	case reflect.Float32, reflect.Float64:
+		for i := range out {
+			out[i] = rv.Index(i).Float()
+		}
+
+	default:
+		for i := range out {
+			out[i] = rv.Index(i).Convert(float64Type).Float()
+		}
+	}
+	return out
+}
+
+func DefaultScale(seq table.Slice) (Scaler, error) {
+	// Handle common case types.
+	switch seq.(type) {
+	case []float64, []int, []uint:
 		return NewLinearScaler(), nil
 
-	case VarOrdinal, VarNominal:
+	case []string:
+		// TODO: Ordinal scale
+	}
+
+	rt := reflect.TypeOf(seq).Elem()
+	rtk := rt.Kind()
+
+	switch {
+	case rt.Implements(colorType):
+		// For things that are already visual values, use an
+		// identity scale.
+		return NewIdentityScale(), nil
+
+		// TODO: GroupAuto needs to make similar
+		// cardinal/ordinal/nominal decisions. Deduplicate
+		// these better.
+	case isCardinal(rtk):
+		return NewLinearScaler(), nil
+
+	case generic.CanOrderR(rtk):
+		// TODO: Ordinal scale
 		panic("not implemented")
 
-	default: // Var
-		// TODO: This is useful for colors and such, but is it
-		// the right answer in general?
-		return NewIdentityScale(), nil
+	case rt.Comparable():
+		// TODO: Nominal scale
+		panic("not implemented")
 	}
+
+	return nil, fmt.Errorf("no default scale type for %T", seq)
 }
 
 func NewIdentityScale() Scaler {
@@ -120,8 +209,8 @@ type identityScale struct {
 	rangeType reflect.Type
 }
 
-func (s *identityScale) ExpandDomain(v Var) {
-	s.rangeType = reflect.TypeOf(v.Seq()).Elem()
+func (s *identityScale) ExpandDomain(v table.Slice) {
+	s.rangeType = reflect.TypeOf(v).Elem()
 }
 
 func (s *identityScale) RangeType() reflect.Type {
@@ -147,15 +236,8 @@ type linearScale struct {
 	r Ranger
 }
 
-func (s *linearScale) ExpandDomain(v Var) {
-	vv, ok := v.(VarCardinal)
-	if !ok {
-		panic(&TypeError{"gg.linearScale.ExpandDomain", reflect.TypeOf(v), "must be a VarCardinal"})
-	}
-	if vv.Len() == 0 {
-		return
-	}
-	data := vv.SeqFloat64()
+func (s *linearScale) ExpandDomain(v table.Slice) {
+	data := sliceToFloat64(v)
 	min, max := s.s.Min, s.s.Max
 	for _, v := range data {
 		if math.IsNaN(v) || math.IsInf(v, 0) {
@@ -221,5 +303,5 @@ func (r *floatRanger) Unmap(y interface{}) float64 {
 }
 
 func (r *floatRanger) RangeType() reflect.Type {
-	return reflect.TypeOf(float64(0))
+	return float64Type
 }

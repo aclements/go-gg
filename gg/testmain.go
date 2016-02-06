@@ -12,6 +12,7 @@ import (
 	"os"
 
 	"github.com/aclements/go-gg/gg"
+	"github.com/aclements/go-gg/table"
 	"github.com/aclements/go-moremath/vec"
 )
 
@@ -36,9 +37,11 @@ func main() {
 	xs := vec.Concat(xs1, xs2)
 	ys := vec.Concat(ys1, ys2)
 
-	plot := gg.NewPlot()
-	plot.Bind("x", xs).Bind("y", ys).BindWithScale("which", which, gg.NewIdentityScale())
-	plot.Add(gg.TransformGroupAuto())
+	tab := new(table.Table).Add("x", xs).Add("y", ys).Add("which", which)
+
+	plot := gg.NewPlot(tab)
+	plot.Bind("x", "x").Bind("y", "y")
+	plot.GroupAuto()
 	plot.Add(gg.LayerLines())
 	plot.WriteSVG(os.Stdout, 200, 100)
 }

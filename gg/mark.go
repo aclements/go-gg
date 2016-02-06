@@ -16,30 +16,27 @@ type marker interface {
 }
 
 type markPath struct {
-	x, y, stroke, fill *BindingGroup
+	x, y, stroke, fill *visual
 }
 
 func (m *markPath) mark(env *renderEnv, canvas *svg.SVG) {
-	fill := env.getFirst(m.fill).(color.Color)
-	vars := env.get(m.x, m.y, m.stroke)
+	// XXX What ensures these type assertions will succeed?
+	xs, ys := m.x.get(env).([]float64), m.y.get(env).([]float64)
+	fill := m.fill.getFirst(env).(color.Color)
 	// XXX Strokes may not be Gray16, but I don't have a good way
 	// to convert from a sequence of things that implement
 	// color.Color to a sequence of color.Color.
-	xs, ys, strokes := vars[0].([]float64), vars[1].([]float64), vars[2].([]color.Gray16)
+	strokes := m.stroke.get(env).([]color.Gray16)
 
 	// Is the stroke constant?
 	stroke := strokes[0]
-	if m.stroke.Var.Len() == 1 {
-		strokes = nil
-	} else {
-		for _, s := range strokes {
-			if s != stroke {
-				goto multistroke
-			}
+	for _, s := range strokes {
+		if s != stroke {
+			goto multistroke
 		}
-		strokes = nil
-	multistroke:
 	}
+	strokes = nil
+multistroke:
 
 	if strokes == nil {
 		// Constant stroke. Use one path.

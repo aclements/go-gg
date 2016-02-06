@@ -5,11 +5,16 @@
 package gg
 
 import (
-	"fmt"
 	"log"
 	"os"
+	"reflect"
 	"strings"
+
+	"github.com/aclements/go-gg/table"
 )
+
+// TODO: Split transforms, scalers, and layers into their own packages
+// to clean up the name spaces and un-prefix their names?
 
 // Warning is a logger for reporting conditions that don't prevent the
 // production of a plot, but may lead to unexpected results.
@@ -20,163 +25,109 @@ type Plot struct {
 
 	env *plotEnv
 
-	aesMap map[string]map[*BindingGroup]bool
-	marks  []marker
-	used   map[*BindingGroup]bool
+	visuals map[visualKey]*visual
+	aesMap  map[string]map[*visual]bool
+	marks   []marker
 }
 
-func NewPlot() *Plot {
+func NewPlot(data table.Grouping) *Plot {
 	p := &Plot{
-		aesMap: make(map[string]map[*BindingGroup]bool),
-		used:   make(map[*BindingGroup]bool),
+		env: &plotEnv{
+			data:     data,
+			bindings: make(map[string]*binding),
+		},
+		visuals: make(map[visualKey]*visual),
+		aesMap:  make(map[string]map[*visual]bool),
 	}
-	return p.Save()
+	return p
 }
 
 type plotEnv struct {
 	parent   *plotEnv
-	bindings map[string]Binding
-	groups   []*GroupID
+	data     table.Grouping
+	bindings map[string]*binding
 }
 
-// Bind is shorthand for p.BindWithScale(prop, data, nil). It binds
-// "data" to visual property "prop" using a default scale.
-func (p *Plot) Bind(prop string, data interface{}) *Plot {
-	return p.BindWithScale(prop, data, nil)
+// A binding combines a set of data values (such as numeric values or
+// factors) with a set of scales for mapping them to visual properties
+// (such as position or color).
+type binding struct {
+	isConstant bool
+	col        string
+	constant   interface{}
+	scales     map[table.GroupID]Scaler
 }
 
-// BindWithScale binds "data" to visual property "prop", using the
-// specified scale to map between data values and visual values.
+// SetData sets p's current data table. The caller must not modify
+// data in this table after this point.
+func (p *Plot) SetData(data table.Grouping) *Plot {
+	// TODO: Check that all bindings are valid in the new table?
+	p.env.data = data
+	return p
+}
+
+// Data returns p's current data table.
+func (p *Plot) Data() table.Grouping {
+	return p.env.data
+}
+
+// TODO: How to bind constants?
+
+// Bind is shorthand for p.BindWithScale(prop, col, nil). It binds the
+// data in column col to visual property prop using a default scale.
+func (p *Plot) Bind(prop, col string) *Plot {
+	return p.BindWithScale(prop, col, nil)
+}
+
+// BindWithScale binds the data in column col to visual property prop,
+// using the specified scale to map between data values and visual
+// values.
 //
-// data may be a Binding, Var, or anything that can be accepted by
-// AutoVar. If data is a Binding, its groups must match those of any
-// other bindings in the Plot. If data is a Var, the Var will be bound
-// in every group (which is initially just the root group) with the
-// specified scale. If data is anything else, it will first be
-// converted to a Var using AutoVar.
-//
-// The caller must not modify data after binding it.
-//
-// XXX Because of things like grouping properties, "prop" isn't
-// necessarily a visual property. It's marks that interpret bindings
-// as visual properties. To make this weirder, these non-visual
-// properties don't have sensible scales, but we force there to be one
-// anyway.
-//
-// scale may be nil. If data is a Binding with a non-nil Scales field,
-// those scales will be used. Otherwise, BindWithScale will pick a
-// scale. If prop is of the form "𝑎_𝑏" and there is an existing
-// binding named "𝑎", this binding will inherit 𝑎's scale. This is
-// used to make properties like "y" and "y_2" map to the same scale.
-// Otherwise, BindWithScale will chose a default scale based on the
-// type of data.
+// If scale is nil, BindWithScale will pick a scale. If prop is of the
+// form "𝑎_𝑏" and there is an existing binding named "𝑎", this binding
+// will inherit 𝑎's scale. This is used to make properties like "y"
+// and "y_2" map to the same scale. Otherwise, BindWithScale will
+// chose a default scale based on the type of data in column col.
 //
 // BindWithScale returns p for ease of method chaining.
-//
-// TODO: This is not commutative, since binding a Binding followed by
-// a Var could result in a non-trivial group structure, while binding
-// a Var followed by a Binding could be an error.
-func (p *Plot) BindWithScale(prop string, data interface{}, scale Scaler) *Plot {
-	// Promote data to a Binding.
-	var b Binding
-	checkGroups := true
-	switch data := data.(type) {
-	case Binding:
-		b = data
+func (p *Plot) BindWithScale(prop, col string, scale Scaler) *Plot {
+	data := p.env.data
 
-	default:
-		v := AutoVar(data)
-		b = make(map[*GroupID]*BindingGroup)
-		for _, gid := range p.groups() {
-			b[gid] = &BindingGroup{Var: v}
-		}
-
-		// b has the right groups by construction.
-		checkGroups = false
-	}
-
-	// If this is the first binding, use its group structure.
-	if len(p.bindings()) == 0 {
-		// This is slightly subtle. Attaching the groups to
-		// the inner-most environment is safe because this
-		// environment must contain the first binding. This
-		// keeps Restoring to an empty environment working and
-		// works with unbinding.
-		p.env.groups = []*GroupID{}
-		for gid := range b {
-			p.env.groups = append(p.env.groups, gid)
-		}
-		checkGroups = false
-	}
-
-	// Check that this binding's group structure matches the other
-	// bindings.
-	if checkGroups {
-		badGroups := false
-		haveGroups := p.groups()
-		if len(haveGroups) != len(b) {
-			badGroups = true
-		} else {
-			for _, gid := range haveGroups {
-				if _, ok := b[gid]; !ok {
-					badGroups = true
-					break
-				}
-			}
-		}
-		if badGroups {
-			// TODO: More informative error.
-			panic(fmt.Sprintf("cannot bind %s; data's groups do not match other bindings", prop))
+	// Check col.
+	for _, col2 := range data.Columns() {
+		if col == col2 {
+			goto haveCol
 		}
 	}
+	panic("unknown column: " + col)
+haveCol:
 
-	// Chose scales.
-	needScales := true
+	// Create a binding.
+	b := binding{col: col}
 	if scale != nil {
-		// Override any existing scales in the binding.
-		for _, gid := range p.groups() {
-			b[gid].Scaler = scale
-		}
-		needScales = false
+		b.scales = map[table.GroupID]Scaler{table.RootGroupID: scale}
 	} else {
-		// Do we need scales?
-		for _, bg := range b {
-			if bg.Scaler == nil {
-				needScales = true
-				break
-			}
-		}
-	}
-	if needScales {
 		if i := strings.Index(prop, "_"); i >= 0 {
 			// Find the scale of the base binding, if any.
 			scaleName := prop[:i]
 			if b2 := p.getBinding(scaleName); b2 != nil {
-				for gid, bg := range b2 {
-					if b[gid].Scaler == nil {
-						b[gid].Scaler = bg.Scaler
-					}
-				}
+				// Copy the scale tree from b2.
+				b.scales = b2.scales
 			}
-			needScales = false
 		}
 
-		if needScales {
+		if b.scales == nil {
 			// Choose the default scale for this data.
-			for _, bg := range b {
-				if bg.Scaler != nil {
-					continue
-				}
-				scale, err := DefaultScale(bg.Var)
-				if err != nil {
-					panic(err)
-				}
-				bg.Scaler = scale
+			seq := data.Table(data.Groups()[0]).Column(col)
+			scale, err := DefaultScale(seq)
+			if err != nil {
+				panic(err)
 			}
+			b.scales = map[table.GroupID]Scaler{table.RootGroupID: scale}
 		}
 	}
 
-	p.env.bindings[prop] = b
+	p.env.bindings[prop] = &b
 	return p
 }
 
@@ -184,7 +135,6 @@ func (p *Plot) unbindAll() *Plot {
 	for _, name := range p.bindings() {
 		p.env.bindings[name] = nil
 	}
-	p.env.groups = nil
 	return p
 }
 
@@ -192,7 +142,7 @@ func (p *Plot) unbindAll() *Plot {
 // and scale rather than the internal struct. OTOH, that would make
 // bindings() difficult.
 
-func (p *Plot) getBinding(name string) Binding {
+func (p *Plot) getBinding(name string) *binding {
 	for e := p.env; e != nil; e = e.parent {
 		if b, ok := e.bindings[name]; ok {
 			return b
@@ -201,11 +151,11 @@ func (p *Plot) getBinding(name string) Binding {
 	return nil
 }
 
-func (p *Plot) mustGetBinding(name string) Binding {
+func (p *Plot) mustGetBinding(name string) *binding {
 	if b := p.getBinding(name); b != nil {
 		return b
 	}
-	panic(fmt.Sprintf("unknown binding %q", name))
+	panic("unknown binding: " + name)
 }
 
 func (p *Plot) bindings() []string {
@@ -224,50 +174,89 @@ func (p *Plot) bindings() []string {
 	return bs
 }
 
-func (p *Plot) groups() []*GroupID {
-	for e := p.env; e != nil; e = e.parent {
-		if e.groups != nil {
-			return e.groups
-		}
-	}
-	return []*GroupID{RootGroupID}
+type visualKey struct {
+	b   *binding
+	gid table.GroupID
 }
 
-// use marks a binding as in-use by a mark and attaches it to a
-// rendering aesthetic. This adds the binding's data to the domain of
-// the binding's scale.
+// use marks a binding as in-use by a mark, adds the binding's data to
+// the domain of the binding's scale, attaches it to a rendering
+// aesthetic, and returns the visually mapped data.
 //
 // TODO: Should aes be an enum?
-func (p *Plot) use(aes string, g *BindingGroup) *Plot {
-	// Train the scale.
-	if !p.used[g] {
-		g.Scaler.ExpandDomain(g.Var)
-		p.used[g] = true
+func (p *Plot) use(aes string, b *binding, gid table.GroupID) *visual {
+	vis := p.visuals[visualKey{b, gid}]
+	if vis == nil {
+		// We need to construct the visual.
+
+		// Find the scale.
+		var scaler Scaler
+		for gid := gid; ; gid = gid.Parent() {
+			if s, ok := b.scales[gid]; ok {
+				scaler = s
+				break
+			}
+			if gid == table.RootGroupID {
+				// TODO: This could happen if an operation
+				// that creates non-root scales (faceting) and
+				// then flattened the data or set new data.
+				// Maybe setting new data needs to check that
+				// all scales still apply?
+				panic("no scale for group " + gid.String())
+			}
+		}
+
+		var seq table.Slice
+		if b.isConstant {
+			// Create the sequence.
+			len := p.Data().Table(gid).Len()
+			sv := reflect.MakeSlice(reflect.SliceOf(reflect.TypeOf(b.constant)), len, len)
+			cv := reflect.ValueOf(b.constant)
+			for i := 0; i < len; i++ {
+				sv.Index(i).Set(cv)
+			}
+			seq = sv.Interface()
+		} else {
+			// Get the data.
+			seq = p.Data().Table(gid).MustColumn(b.col)
+		}
+
+		// Train the scale.
+		scaler.ExpandDomain(seq)
+
+		// Create the visual.
+		vis = &visual{seq: seq, scaler: scaler}
+
+		p.visuals[visualKey{b, gid}] = vis
 	}
 
 	// Add it to the aesthetic mappings.
 	am := p.aesMap[aes]
 	if am == nil {
-		am = make(map[*BindingGroup]bool)
+		am = make(map[*visual]bool)
 		p.aesMap[aes] = am
 	}
-	am[g] = true
+	am[vis] = true
 
-	return p
+	return vis
 }
 
-// Save saves the current bindings of p to a stack. This effectively
-// creates a new scope for declaring bindings: all of the existing
-// bindings continue to be available, but new bindings can be created
-// in the scope and existing bindings can be shadowed by new bindings
-// of the same name.
+// Save saves the current data table and bindings of p to a stack.
+// This creates a new scope for declaring bindings: all of the
+// existing bindings continue to be available, but new bindings can be
+// created in the scope and existing bindings can be shadowed by new
+// bindings of the same name.
 func (p *Plot) Save() *Plot {
-	p.env = &plotEnv{parent: p.env, bindings: make(map[string]Binding)}
+	p.env = &plotEnv{
+		parent:   p.env,
+		data:     p.env.data,
+		bindings: make(map[string]*binding),
+	}
 	return p
 }
 
-// Restore restores the bindings of p from the save stack. The
-// effectively exits the current bindings scope.
+// Restore restores the data table and bindings of p from the save
+// stack. The exits the current bindings scope.
 func (p *Plot) Restore() *Plot {
 	if p.env.parent == nil {
 		panic("unbalanced Save/Restore")
@@ -276,6 +265,9 @@ func (p *Plot) Restore() *Plot {
 	// TODO: Clear unwound bindings from p.used.
 	return p
 }
+
+// TODO: Maybe Plotter should be an interface so types can satisfy it?
+// This might be a nice way to add Bindings to a plot.
 
 type Plotter func(p *Plot)
 
