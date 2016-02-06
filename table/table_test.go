@@ -17,7 +17,7 @@ func isEmpty(g Grouping) bool {
 	if t, _ := g.(*Table); t != nil && t.Len() != 0 {
 		return false
 	}
-	return g.Columns() == nil && len(g.Groups()) == 0
+	return g.Columns() == nil && len(g.Tables()) == 0
 }
 
 func de(x, y interface{}) bool {
@@ -26,10 +26,10 @@ func de(x, y interface{}) bool {
 
 func equal(g1, g2 Grouping) bool {
 	if !de(g1.Columns(), g2.Columns()) ||
-		!de(g1.Groups(), g2.Groups()) {
+		!de(g1.Tables(), g2.Tables()) {
 		return false
 	}
-	for _, gid := range g1.Groups() {
+	for _, gid := range g1.Tables() {
 		for _, col := range g1.Columns() {
 			if !de(g1.Table(gid).Column(col), g2.Table(gid).Column(col)) {
 				return false
@@ -74,8 +74,8 @@ func TestEmptyTable(t *testing.T) {
 	shouldPanic(t, "unknown column", func() {
 		tab.MustColumn("x")
 	})
-	if v, w := tab.Groups(), []GroupID{}; !de(v, w) {
-		t.Fatalf("Table{}.Groups should be %v; got %v", w, v)
+	if v, w := tab.Tables(), []GroupID{}; !de(v, w) {
+		t.Fatalf("Table{}.Tables should be %v; got %v", w, v)
 	}
 	if v := tab.Table(RootGroupID); v != nil {
 		t.Fatalf("Table{}.Table(RootGroupID) should be nil; got %v", v)
@@ -131,8 +131,8 @@ func TestTable0(t *testing.T) {
 	shouldPanic(t, "unknown column", func() {
 		tab.MustColumn("y")
 	})
-	if v, w := tab.Groups(), []GroupID{RootGroupID}; !de(v, w) {
-		t.Fatalf("tab.Groups() should be %v; got %v", w, v)
+	if v, w := tab.Tables(), []GroupID{RootGroupID}; !de(v, w) {
+		t.Fatalf("tab.Tables() should be %v; got %v", w, v)
 	}
 	if v := tab.Table(RootGroupID); v != tab {
 		t.Fatalf("tab.Table(RootGroupID) should be %v; got %v", tab, v)
@@ -177,8 +177,8 @@ func TestTable1(t *testing.T) {
 	shouldPanic(t, "unknown column", func() {
 		tab.MustColumn("y")
 	})
-	if v, w := tab.Groups(), []GroupID{RootGroupID}; !de(v, w) {
-		t.Fatalf("tab.Groups() should be %v; got %v", w, v)
+	if v, w := tab.Tables(), []GroupID{RootGroupID}; !de(v, w) {
+		t.Fatalf("tab.Tables() should be %v; got %v", w, v)
 	}
 	if v := tab.Table(RootGroupID); v != tab {
 		t.Fatalf("tab.Table(RootGroupID) should be %v; got %v", tab, v)
@@ -214,8 +214,8 @@ func TestAddTable(t *testing.T) {
 	if v, w := tab01.Columns(), []string{"x"}; !de(v, w) {
 		t.Fatalf("tab01.Columns() should be %v; got %v", w, v)
 	}
-	if v, w := tab01.Groups(), []GroupID{RootGroupID, xgid}; !de(v, w) {
-		t.Fatalf("tab01.Groups() should be %v; got %v", w, v)
+	if v, w := tab01.Tables(), []GroupID{RootGroupID, xgid}; !de(v, w) {
+		t.Fatalf("tab01.Tables() should be %v; got %v", w, v)
 	}
 	if v := tab01.Table(RootGroupID); v != tab0 {
 		t.Fatalf("tab01.Table(RootGroupID) should be tab0; got %v", v)

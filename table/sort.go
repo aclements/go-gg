@@ -20,7 +20,7 @@ func SortBy(g Grouping, col string) Grouping {
 
 	// Sort each group.
 	out := Grouping(new(Table))
-	for _, gid := range g.Groups() {
+	for _, gid := range g.Tables() {
 		t := g.Table(gid)
 		seq := t.MustColumn(col)
 		sorter := generic.Sorter(seq)

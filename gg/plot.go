@@ -118,7 +118,7 @@ haveCol:
 
 		if b.scales == nil {
 			// Choose the default scale for this data.
-			seq := data.Table(data.Groups()[0]).Column(col)
+			seq := data.Table(data.Tables()[0]).Column(col)
 			scale, err := DefaultScale(seq)
 			if err != nil {
 				panic(err)

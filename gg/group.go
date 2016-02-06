@@ -31,7 +31,7 @@ func (p *Plot) GroupBy(cols ...string) *Plot {
 func (p *Plot) GroupAuto() *Plot {
 	// Find the categorical columns.
 	categorical := []string{}
-	tab := p.Data().Table(p.Data().Groups()[0])
+	tab := p.Data().Table(p.Data().Tables()[0])
 	for _, col := range tab.Columns() {
 		et := reflect.TypeOf(tab.Column(col)).Elem()
 		if et.Comparable() && !isCardinal(et.Kind()) {

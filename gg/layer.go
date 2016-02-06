@@ -69,7 +69,7 @@ func LayerPaths() Plotter {
 		}
 
 		data := p.Data()
-		for _, gid := range data.Groups() {
+		for _, gid := range data.Tables() {
 			switch data.Table(gid).Len() {
 			case 0:
 				continue

@@ -77,7 +77,7 @@ func GroupBy(g Grouping, cols ...string) Grouping {
 	}
 
 	out := Grouping(new(Table))
-	for _, gid := range g.Groups() {
+	for _, gid := range g.Tables() {
 		t := g.Table(gid)
 		c := t.MustColumn(cols[0])
 
@@ -114,7 +114,7 @@ func GroupBy(g Grouping, cols ...string) Grouping {
 
 // Flatten concatenates all of the groups in g into a single Table.
 func Flatten(g Grouping) *Table {
-	groups := g.Groups()
+	groups := g.Tables()
 	switch len(groups) {
 	case 0:
 		return new(Table)
@@ -125,7 +125,7 @@ func Flatten(g Grouping) *Table {
 
 	// Construct each column.
 	out := new(Table)
-	seqs := make([]reflect.Value, len(g.Groups()))
+	seqs := make([]reflect.Value, len(g.Tables()))
 	for _, col := range g.Columns() {
 		seqs = seqs[:0]
 		for _, gid := range groups {

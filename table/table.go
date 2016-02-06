@@ -74,8 +74,9 @@ type Grouping interface {
 	// set of columns.
 	Columns() []string
 
-	// Groups returns the IDs of the groups in this Grouping.
-	Groups() []GroupID
+	// Tables returns the group IDs of the tables in this
+	// Grouping.
+	Tables() []GroupID
 
 	// Table returns the Table in group gid, or nil if there is no
 	// such Table.
@@ -190,9 +191,9 @@ func (t *Table) MustColumn(name string) Slice {
 	panic("unknown column: " + name)
 }
 
-// Groups returns the groups in this Table. If t is empty, there are
-// no groups. Otherwise, there is only RootGroupID.
-func (t *Table) Groups() []GroupID {
+// Tables returns the groups IDs in this Table. If t is empty, there
+// are no group IDs. Otherwise, there is only RootGroupID.
+func (t *Table) Tables() []GroupID {
 	if t.cols == nil {
 		return []GroupID{}
 	}
@@ -238,7 +239,7 @@ func (g *groupedTable) Columns() []string {
 	return g.colNames
 }
 
-func (g *groupedTable) Groups() []GroupID {
+func (g *groupedTable) Tables() []GroupID {
 	return g.groups
 }
 
