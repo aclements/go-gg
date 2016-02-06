@@ -28,7 +28,7 @@ func SortBy(g Grouping, col string) Grouping {
 		if sort.IsSorted(sorter) {
 			// Avoid shuffling everything by the identity
 			// permutation.
-			out.AddTable(gid, t)
+			out = out.AddTable(gid, t)
 			continue
 		}
 
@@ -46,9 +46,9 @@ func SortBy(g Grouping, col string) Grouping {
 		for _, name := range t.Columns() {
 			seq := t.Column(name)
 			seq = generic.MultiIndex(seq, perm)
-			nt.Add(name, seq)
+			nt = nt.Add(name, seq)
 		}
-		out.AddTable(gid, nt)
+		out = out.AddTable(gid, nt)
 	}
 
 	return out
