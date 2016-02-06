@@ -10,12 +10,12 @@ import (
 	"github.com/aclements/go-gg/generic"
 )
 
-// Sort sorts each group of g by the named column. If the column's
+// SortBy sorts each group of g by the named column. If the column's
 // type implements sort.Interface, rows will be sorted according to
 // that order. Otherwise, the values in the column must be naturally
 // ordered (their types must be orderable by the Go specification). If
-// neither is true, Sort panics with a *generic.TypeError.
-func Sort(g Grouping, col string) Grouping {
+// neither is true, SortBy panics with a *generic.TypeError.
+func SortBy(g Grouping, col string) Grouping {
 	// TODO: Consider a generic MapConcatGroups.
 
 	// Sort each group.
