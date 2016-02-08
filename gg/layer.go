@@ -10,15 +10,16 @@ import (
 	"github.com/aclements/go-gg/table"
 )
 
-// LayerLines is like LayerPaths, but sorts the data by the "x"
-// property.
+// LayerLines is like LayerPaths, but connects data points in order by
+// the "x" property.
 func LayerLines() Plotter {
 	return func(p *Plot) {
 		b := p.mustGetBinding("x")
 		if b.isConstant {
 			p.Add(LayerPaths())
 		} else {
-			p.Save().SortBy(b.col).Add(LayerPaths()).Restore()
+			defer p.Save().Restore()
+			p.SortBy(b.col).Add(LayerPaths())
 		}
 	}
 }
