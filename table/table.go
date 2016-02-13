@@ -258,9 +258,9 @@ func (g *groupedTable) AddTable(gid GroupID, t *Table) Grouping {
 	// Create the new grouped table, removing any existing table
 	// with the same GID.
 	ng := &groupedTable{map[GroupID]*Table{}, []GroupID{}, g.colNames}
-	for gid2, t2 := range g.tables {
+	for _, gid2 := range g.groups {
 		if gid != gid2 {
-			ng.tables[gid2] = t2
+			ng.tables[gid2] = g.tables[gid2]
 			ng.groups = append(ng.groups, gid2)
 		}
 	}

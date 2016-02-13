@@ -272,3 +272,31 @@ func TestColumnOrder(t *testing.T) {
 		t.Fatalf("want %v; got %v", want, tab.Columns())
 	}
 }
+
+func TestGroupOrder(t *testing.T) {
+	// Test that groups stay in order.
+	gids := []GroupID{
+		RootGroupID.Extend("a"),
+		RootGroupID.Extend("b"),
+		RootGroupID.Extend("c"),
+		RootGroupID.Extend("d"),
+	}
+	tab := new(Table).Add("col", []int{})
+	for iter := 0; iter < 10; iter++ {
+		g := Grouping(new(Table))
+		for _, gid := range gids {
+			g = g.AddTable(gid, tab)
+		}
+		if !de(gids, g.Tables()) {
+			t.Fatalf("want %v; got %v", gids, g.Tables())
+		}
+	}
+
+	// Test that re-adding a group moves it to the end.
+	// TODO: This may not be the behavior we want.
+	g := Grouping(new(Table))
+	g = g.AddTable(gids[0], tab).AddTable(gids[1], tab).AddTable(gids[0], tab)
+	if want := []GroupID{gids[1], gids[0]}; !de(want, g.Tables()) {
+		t.Fatalf("want %v; got %v", want, g.Tables())
+	}
+}
