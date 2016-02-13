@@ -82,23 +82,26 @@ func GroupBy(g Grouping, cols ...string) Grouping {
 		c := t.MustColumn(cols[0])
 
 		// Create an index on c.
-		subgroups := make(map[interface{}]GroupID)
+		subgroups := []GroupID{}
+		gidkey := make(map[interface{}]GroupID)
 		rowsMap := make(map[GroupID][]int)
 		seq := reflect.ValueOf(c)
 		for i := 0; i < seq.Len(); i++ {
 			x := seq.Index(i).Interface()
-			subgid, ok := subgroups[x]
+			subgid, ok := gidkey[x]
 			if !ok {
 				subgid = gid.Extend(strconv.Itoa(len(subgroups)))
-				subgroups[x] = subgid
+				subgroups = append(subgroups, subgid)
+				gidkey[x] = subgid
 				rowsMap[subgid] = []int{}
 			}
 			rowsMap[subgid] = append(rowsMap[subgid], i)
 		}
 
 		// Split this group in all columns.
-		for subgid, rows := range rowsMap {
+		for _, subgid := range subgroups {
 			// Construct this new group.
+			rows := rowsMap[subgid]
 			subgroup := new(Table)
 			for _, name := range t.Columns() {
 				seq := t.Column(name)
