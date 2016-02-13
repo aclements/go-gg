@@ -223,7 +223,7 @@ func (t *Table) AddTable(gid GroupID, t2 *Table) Grouping {
 		return t
 	} else if t2.cols == nil {
 		return t
-	} else if gid == RootGroupID || t.cols == nil {
+	} else if gid == RootGroupID {
 		return t2
 	}
 

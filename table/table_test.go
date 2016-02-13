@@ -12,6 +12,7 @@ import (
 )
 
 var xgid = RootGroupID.Extend("xgid")
+var ygid = RootGroupID.Extend("ygid")
 
 func isEmpty(g Grouping) bool {
 	if t, _ := g.(*Table); t != nil && t.Len() != 0 {
@@ -243,5 +244,10 @@ func TestAddTable(t *testing.T) {
 	}
 	if v := tab0x.AddTable(RootGroupID, nil); !isEmpty(v) {
 		t.Fatalf("tab0x.AddTable(RootGroupID, nil) should be empty; got %v", v)
+	}
+
+	tab2 := new(Table).AddTable(xgid, tab0).AddTable(ygid, tab1)
+	if want := []GroupID{xgid, ygid}; !de(want, tab2.Tables()) {
+		t.Fatalf("tables should be %v; got %v", want, tab2.Tables())
 	}
 }
