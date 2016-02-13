@@ -136,9 +136,9 @@ func (t *Table) Add(name string, data Slice) *Table {
 	// Create the new table, removing any existing column with the
 	// same name.
 	nt := &Table{make(map[string]Slice), []string{}, t.len}
-	for name2, col2 := range t.cols {
+	for _, name2 := range t.colNames {
 		if name != name2 {
-			nt.cols[name2] = col2
+			nt.cols[name2] = t.cols[name2]
 			nt.colNames = append(nt.colNames, name2)
 		}
 	}

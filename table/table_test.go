@@ -251,3 +251,24 @@ func TestAddTable(t *testing.T) {
 		t.Fatalf("tables should be %v; got %v", want, tab2.Tables())
 	}
 }
+
+func TestColumnOrder(t *testing.T) {
+	// Test that columns stay in order.
+	cols := []string{"a", "b", "c", "d"}
+	for iter := 0; iter < 10; iter++ {
+		tab := new(Table)
+		for _, col := range cols {
+			tab = tab.Add(col, []int{})
+		}
+		if !de(cols, tab.Columns()) {
+			t.Fatalf("want %v; got %v", cols, tab.Columns())
+		}
+	}
+
+	// Test that re-adding a column moves it to the end.
+	// TODO: This may not be the behavior we want.
+	tab := new(Table).Add("a", []int{}).Add("b", []int{}).Add("a", []int{})
+	if want := []string{"b", "a"}; !de(want, tab.Columns()) {
+		t.Fatalf("want %v; got %v", want, tab.Columns())
+	}
+}
