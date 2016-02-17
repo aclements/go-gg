@@ -4,12 +4,6 @@
 
 package gg
 
-import (
-	"image/color"
-
-	"github.com/aclements/go-gg/table"
-)
-
 // LayerLines is like LayerPaths, but connects data points in order by
 // the "x" property.
 func LayerLines() Plotter {
@@ -30,6 +24,9 @@ func LayerLines() Plotter {
 //
 // The "x" and "y" properties define the location of each point on the
 // path. They are connected with straight lines.
+//
+// TODO: Should "x" and "y" default to the first and second columns
+// with default scales?
 //
 // The "color" property defines the color of each line segment in the
 // path. If two subsequent points have different color value, the
@@ -57,50 +54,11 @@ func LayerLines() Plotter {
 // later.
 func LayerPaths() Plotter {
 	return func(p *Plot) {
-		xb, yb := p.mustGetBinding("x"), p.mustGetBinding("y")
-		colorb := p.getBinding("color")
-		fillb := p.getBinding("fill")
-
-		if colorb == nil {
-			// XXX Yuck
-			colorb = &binding{isConstant: true, constant: color.Black, scales: map[table.GroupID]Scaler{table.RootGroupID: NewIdentityScale()}}
-		}
-		if fillb == nil {
-			fillb = &binding{isConstant: true, constant: color.Transparent, scales: map[table.GroupID]Scaler{table.RootGroupID: NewIdentityScale()}}
-		}
-
-		data := p.Data()
-		for _, gid := range data.Tables() {
-			switch data.Table(gid).Len() {
-			case 0:
-				continue
-
-			case 1:
-				// TODO: Depending on the stroke cap,
-				// this *could* be well-defined.
-				Warning.Print("cannot layer path through 1 point; ignoring")
-				continue
-			}
-
-			// TODO: Check that scales map to the right types.
-			//checkScaleRange("LayerPaths", x, ScaleTypeReal)
-			//checkScaleRange("LayerPaths", y, ScaleTypeReal)
-			//checkScaleRange("LayerPaths", colorb, ScaleTypeColor)
-			//checkScaleRange("LayerPaths", fill, ScaleTypeColor)
-
-			// TODO: When I register a mark, perhaps I
-			// have to include what group it belongs to so
-			// rendering knows which facet to put it in.
-			mark := &markPath{
-				// TODO: Should these names match the
-				// visual property names? color vs
-				// stroke.
-				p.use("x", xb, gid),
-				p.use("y", yb, gid),
-				p.use("stroke", colorb, gid),
-				p.use("fill", fillb, gid),
-			}
-			p.marks = append(p.marks, mark)
-		}
+		p.marks = append(p.marks, plotMark{&markPath{
+			p.use("x", p.mustGetBinding("x")),
+			p.use("y", p.mustGetBinding("y")),
+			p.use("stroke", p.getBinding("color")),
+			p.use("fill", p.getBinding("fill")),
+		}, p.Data().Tables()})
 	}
 }

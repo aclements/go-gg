@@ -25,9 +25,9 @@ type Plot struct {
 
 	env *plotEnv
 
-	visuals map[visualKey]*visual
-	aesMap  map[string]map[*visual]bool
-	marks   []marker
+	scaledData map[scaledDataKey]*scaledData
+	aesMap     map[string]map[*scaledData]bool
+	marks      []plotMark
 }
 
 func NewPlot(data table.Grouping) *Plot {
@@ -36,8 +36,8 @@ func NewPlot(data table.Grouping) *Plot {
 			data:     data,
 			bindings: make(map[string]*binding),
 		},
-		visuals: make(map[visualKey]*visual),
-		aesMap:  make(map[string]map[*visual]bool),
+		scaledData: make(map[scaledDataKey]*scaledData),
+		aesMap:     make(map[string]map[*scaledData]bool),
 	}
 	return p
 }
@@ -174,71 +174,87 @@ func (p *Plot) bindings() []string {
 	return bs
 }
 
-type visualKey struct {
-	b   *binding
-	gid table.GroupID
+type scaledDataKey struct {
+	data table.Grouping
+	b    *binding
 }
 
 // use marks a binding as in-use by a mark, adds the binding's data to
 // the domain of the binding's scale, attaches it to a rendering
-// aesthetic, and returns the visually mapped data.
+// aesthetic, and returns the scaled data.
+//
+// b may be nil, in which case it simply returns nil. This is
+// convenient in combination with getBinding for an optional binding.
 //
 // TODO: Should aes be an enum?
-func (p *Plot) use(aes string, b *binding, gid table.GroupID) *visual {
-	vis := p.visuals[visualKey{b, gid}]
-	if vis == nil {
-		// We need to construct the visual.
+func (p *Plot) use(aes string, b *binding) *scaledData {
+	if b == nil {
+		return nil
+	}
 
-		// Find the scale.
-		var scaler Scaler
-		for gid := gid; ; gid = gid.Parent() {
-			if s, ok := b.scales[gid]; ok {
-				scaler = s
-				break
-			}
-			if gid == table.RootGroupID {
-				// TODO: This could happen if an operation
-				// that creates non-root scales (faceting) and
-				// then flattened the data or set new data.
-				// Maybe setting new data needs to check that
-				// all scales still apply?
-				panic("no scale for group " + gid.String())
-			}
+	sd := p.scaledData[scaledDataKey{p.Data(), b}]
+	if sd == nil {
+		// Construct the scaledData.
+		sd = &scaledData{
+			seqs: make(map[table.GroupID]scaledSeq),
 		}
 
-		var seq table.Slice
-		if b.isConstant {
-			// Create the sequence.
-			len := p.Data().Table(gid).Len()
-			sv := reflect.MakeSlice(reflect.SliceOf(reflect.TypeOf(b.constant)), len, len)
-			cv := reflect.ValueOf(b.constant)
-			for i := 0; i < len; i++ {
-				sv.Index(i).Set(cv)
+		for _, gid := range p.Data().Tables() {
+			// Find the scale.
+			var scaler Scaler
+			for gid := gid; ; gid = gid.Parent() {
+				if s, ok := b.scales[gid]; ok {
+					scaler = s
+					break
+				}
+				if gid == table.RootGroupID {
+					// TODO: This could happen if
+					// an operation that creates
+					// non-root scales (faceting)
+					// and then flattened the data
+					// or set new data. Maybe
+					// setting new data needs to
+					// check that all scales still
+					// apply?
+					panic("no scale for group " + gid.String())
+				}
 			}
-			seq = sv.Interface()
-		} else {
-			// Get the data.
-			seq = p.Data().Table(gid).MustColumn(b.col)
+
+			var seq table.Slice
+			table := p.Data().Table(gid)
+			if b.isConstant {
+				// Create the sequence.
+				len := table.Len()
+				sv := reflect.MakeSlice(reflect.SliceOf(reflect.TypeOf(b.constant)), len, len)
+				cv := reflect.ValueOf(b.constant)
+				for i := 0; i < len; i++ {
+					sv.Index(i).Set(cv)
+				}
+				seq = sv.Interface()
+			} else {
+				// Get the data.
+				seq = table.MustColumn(b.col)
+			}
+
+			// Train the scale.
+			scaler.ExpandDomain(seq)
+
+			// Add it to the scaledData.
+			sd.seqs[gid] = scaledSeq{seq, scaler}
 		}
 
-		// Train the scale.
-		scaler.ExpandDomain(seq)
-
-		// Create the visual.
-		vis = &visual{seq: seq, scaler: scaler}
-
-		p.visuals[visualKey{b, gid}] = vis
+		p.scaledData[scaledDataKey{p.Data(), b}] = sd
 	}
 
 	// Add it to the aesthetic mappings.
 	am := p.aesMap[aes]
 	if am == nil {
-		am = make(map[*visual]bool)
+		am = make(map[*scaledData]bool)
 		p.aesMap[aes] = am
 	}
-	am[vis] = true
+	am[sd] = true
 
-	return vis
+	return sd
 }
 
 // Save saves the current data table and bindings of p to a stack.
