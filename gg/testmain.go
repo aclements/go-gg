@@ -12,6 +12,7 @@ import (
 	"os"
 
 	"github.com/aclements/go-gg/gg"
+	"github.com/aclements/go-gg/ggstat"
 	"github.com/aclements/go-gg/table"
 	"github.com/aclements/go-moremath/vec"
 )
@@ -43,5 +44,14 @@ func main() {
 	plot.Bind("x", "x").Bind("y", "y")
 	plot.GroupAuto()
 	plot.Add(gg.LayerLines())
-	plot.WriteSVG(os.Stdout, 200, 100)
+
+	plot.SetData(ggstat.ECDF(plot.Data(), "x", ""))
+	// XXX Something is wrong here because the existing y binding
+	// no longer matches up with the columns. Hence, we have to
+	// re-bind it, *but* that creates a new Y scale.
+	plot.Bind("x", "x").Bind("y", "cumulative density")
+	plot.Add(gg.LayerSteps(gg.StepHV))
+	//plot.Add(gg.LayerSteps(gg.StepHMid))
+
+	plot.WriteSVG(os.Stdout, 400, 300)
 }
