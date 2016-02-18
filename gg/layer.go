@@ -18,6 +18,49 @@ func LayerLines() Plotter {
 	}
 }
 
+//go:generate stringer -type StepMode
+
+// StepMode controls how LayerSteps connects subsequent points.
+type StepMode int
+
+const (
+	// StepHV makes LayerSteps connect subsequent points with a
+	// horizontal segment and then a vertical segment.
+	StepHV StepMode = iota
+
+	// StepVH makes LayerSteps connect subsequent points with a
+	// vertical segment and then a horizontal segment.
+	StepVH
+
+	// StepHMid makes LayerSteps connect subsequent points A and B
+	// with three segments: a horizontal segment from A to the
+	// midpoint between A and B, followed by vertical segment,
+	// followed by a horizontal segment from the midpoint to B.
+	StepHMid
+
+	// StepVMid makes LayerSteps connect subsequent points A and B
+	// with three segments: a vertical segment from A to the
+	// midpoint between A and B, followed by horizontal segment,
+	// followed by a vertical segment from the midpoint to B.
+	StepVMid
+)
+
+// LayerSteps is like LayerPaths, but connects data points with a path
+// consisting only of horizontal and vertical segments.
+func LayerSteps(dir StepMode) Plotter {
+	// TODO: Should this also support only showing horizontal or
+	// vertical segments?
+	return func(p *Plot) {
+		p.marks = append(p.marks, plotMark{&markSteps{
+			dir,
+			p.use("x", p.mustGetBinding("x")),
+			p.use("y", p.mustGetBinding("y")),
+			p.use("stroke", p.getBinding("color")),
+			p.use("fill", p.getBinding("fill")),
+		}, p.Data().Tables()})
+	}
+}
+
 // LayerPaths layers a path connecting successive data points in each
 // group. By default the path is stroked, but if the "fill" property
 // is set, it produces solid polygons.

@@ -8,6 +8,7 @@ import (
 	"image/color"
 	"strconv"
 
+	"github.com/aclements/go-gg/table"
 	"github.com/ajstarks/svgo"
 )
 
@@ -25,7 +26,9 @@ type markPath struct {
 }
 
 func (m *markPath) mark(env *renderEnv, canvas *svg.SVG) {
-	// XXX What ensures these type assertions will succeed?
+	// XXX What ensures these type assertions will succeed,
+	// especially if it's an identity scale? Maybe identity scales
+	// still need to coerce their results to the right type.
 	xs, ys := env.get(m.x).([]float64), env.get(m.y).([]float64)
 	// XXX Strokes may not be Gray16, but I don't have a good way
 	// to convert from a sequence of things that implement
@@ -40,6 +43,75 @@ func (m *markPath) mark(env *renderEnv, canvas *svg.SVG) {
 	}
 
 	drawPath(canvas, xs, ys, strokes, fill)
+}
+
+type markSteps struct {
+	dir StepMode
+
+	x, y, stroke, fill *scaledData
+}
+
+func (m *markSteps) mark(env *renderEnv, canvas *svg.SVG) {
+	xs, ys := env.get(m.x).([]float64), env.get(m.y).([]float64)
+	// XXX Strokes may not be Gray16.
+	var strokes = []color.Gray16{color.Black}
+	if m.stroke != nil {
+		strokes = env.get(m.stroke).([]color.Gray16)
+	}
+	var fill color.Color = color.Transparent
+	if m.fill != nil {
+		fill = env.getFirst(m.fill).(color.Color)
+	}
+
+	if len(xs) == 0 {
+		return
+	}
+
+	// Create intermediate points.
+	xs2, ys2 := make([]float64, 2*len(xs)), make([]float64, 2*len(ys))
+	var strokes2 []color.Gray16
+	if m.stroke == nil {
+		strokes2 = strokes
+	} else {
+		strokes2 = make([]color.Gray16, 2*len(xs))
+	}
+	for i := range xs2 {
+		switch m.dir {
+		case StepHV, StepVH:
+			xs2[i], ys2[i] = xs[i/2], ys[i/2]
+		case StepHMid, StepVMid:
+			if i == 0 || i == len(xs2)-1 {
+				xs2[i], ys2[i] = xs[i/2], ys[i/2]
+				break
+			}
+			var p1, p2 int
+			if i%2 == 0 {
+				// Interpolate i/2-1 and i/2.
+				p1, p2 = i/2-1, i/2
+			} else {
+				// Interpolate i/2 and i/2+1.
+				p1, p2 = i/2, i/2+1
+			}
+			if m.dir == StepHMid {
+				xs2[i], ys2[i] = (xs[p1]+xs[p2])/2, ys[i/2]
+			} else {
+				xs2[i], ys2[i] = xs[i/2], (ys[p1]+ys[p2])/2
+			}
+		}
+		if m.stroke != nil {
+			strokes2[i] = strokes[i/2]
+		}
+	}
+	if m.dir == StepHV {
+		xs2 = xs2[1:]
+	} else if m.dir == StepVH {
+		ys2 = ys2[1:]
+	}
+	if m.stroke != nil {
+		strokes2 = strokes2[:len(strokes2)-1]
+	}
+
+	drawPath(canvas, xs2, ys2, strokes2, fill)
 }
 
 func drawPath(canvas *svg.SVG, xs, ys []float64, strokes []color.Gray16, fill color.Color) {
