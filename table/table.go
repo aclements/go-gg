@@ -82,15 +82,15 @@ type Grouping interface {
 	// such Table.
 	Table(gid GroupID) *Table
 
-	// AddTable reparents Table t into group gid and returns a new
-	// Grouping with the addition of Table t bound to group gid.
-	// If t is nil, this returns a Grouping with group gid
-	// removed. If t is the empty Table, this is a no-op because
-	// the empty Table contains no groups. Otherwise, AddTable
-	// first removes group gid if it already exists, and then adds
-	// t as a new group. Table t must have the same set of columns
-	// as any existing Tables in this group or AddTable will
-	// panic.
+	// AddTable returns a new Grouping with the addition of Table
+	// t bound to group gid. If t is nil, it returns a Grouping
+	// with group gid removed. If t is the empty Table, this is a
+	// no-op because the empty Table contains no groups.
+	// Otherwise, AddTable first removes group gid if it already
+	// exists, and then adds t as a new group. Table t must have
+	// the same set of columns as any existing Tables in this
+	// group and they must have identical types; otherwise,
+	// AddTable will panic.
 	//
 	// TODO The same set or the same sequence of columns? Given
 	// that I never use the sequence (except maybe for printing),
@@ -279,9 +279,15 @@ func (g *groupedTable) AddTable(gid GroupID, t *Table) Grouping {
 	}
 
 	// Check that t's column structure matches.
+	tBase := ng.tables[ng.groups[0]]
 	for _, col := range ng.colNames {
 		if _, ok := t.cols[col]; !ok {
 			panic("table missing column: " + col)
+		}
+		t0 := reflect.TypeOf(tBase.cols[col])
+		t1 := reflect.TypeOf(t.cols[col])
+		if t0 != t1 {
+			panic(&generic.TypeError{t0, t1, "for column " + col + " are not the same"})
 		}
 	}
 	if len(t.cols) != len(ng.colNames) {

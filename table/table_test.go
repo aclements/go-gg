@@ -250,6 +250,10 @@ func TestAddTable(t *testing.T) {
 	if want := []GroupID{xgid, ygid}; !de(want, tab2.Tables()) {
 		t.Fatalf("tables should be %v; got %v", want, tab2.Tables())
 	}
+
+	shouldPanic(t, `\[\]int and \[\]float64 for column x`, func() {
+		tab0.AddTable(xgid, new(Table).Add("x", []float64{}))
+	})
 }
 
 func TestColumnOrder(t *testing.T) {
