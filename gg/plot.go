@@ -8,8 +8,8 @@ import (
 	"log"
 	"os"
 	"reflect"
-	"strings"
 
+	"github.com/aclements/go-gg/generic"
 	"github.com/aclements/go-gg/table"
 )
 
@@ -26,7 +26,7 @@ type Plot struct {
 	env *plotEnv
 
 	scaledData map[scaledDataKey]*scaledData
-	aesMap     map[string]map[*scaledData]bool
+	scaleSet   map[string]map[Scaler]bool
 	marks      []plotMark
 }
 
@@ -35,9 +35,10 @@ func NewPlot(data table.Grouping) *Plot {
 		env: &plotEnv{
 			data:     data,
 			bindings: make(map[string]*binding),
+			scales:   make(map[string]scalerTree),
 		},
 		scaledData: make(map[scaledDataKey]*scaledData),
-		aesMap:     make(map[string]map[*scaledData]bool),
+		scaleSet:   make(map[string]map[Scaler]bool),
 	}
 	return p
 }
@@ -46,6 +47,7 @@ type plotEnv struct {
 	parent   *plotEnv
 	data     table.Grouping
 	bindings map[string]*binding
+	scales   map[string]scalerTree
 }
 
 // A binding combines a set of data values (such as numeric values or
@@ -55,7 +57,6 @@ type binding struct {
 	isConstant bool
 	col        string
 	constant   interface{}
-	scales     map[table.GroupID]Scaler
 }
 
 // SetData sets p's current data table. The caller must not modify
@@ -73,24 +74,18 @@ func (p *Plot) Data() table.Grouping {
 
 // TODO: How to bind constants?
 
-// Bind is shorthand for p.BindWithScale(prop, col, nil). It binds the
-// data in column col to visual property prop using a default scale.
+// Bind binds the data in column col to property prop, so layers can
+// look up the data bound to properties they use.
+//
+// By convention, the scale used for a property has the same name as
+// that property, but is there is a "_" in the property name, it and
+// everything after it are stripped to get the scale name.
+//
+// Bind returns p for ease of method chaining.
+//
+// TODO: Now that the binding doesn't track its own scale, this seems
+// extra silly.
 func (p *Plot) Bind(prop, col string) *Plot {
-	return p.BindWithScale(prop, col, nil)
-}
-
-// BindWithScale binds the data in column col to visual property prop,
-// using the specified scale to map between data values and visual
-// values.
-//
-// If scale is nil, BindWithScale will pick a scale. If prop is of the
-// form "𝑎_𝑏" and there is an existing binding named "𝑎", this binding
-// will inherit 𝑎's scale. This is used to make properties like "y"
-// and "y_2" map to the same scale. Otherwise, BindWithScale will
-// chose a default scale based on the type of data in column col.
-//
-// BindWithScale returns p for ease of method chaining.
-func (p *Plot) BindWithScale(prop, col string, scale Scaler) *Plot {
 	data := p.env.data
 
 	// Check col.
@@ -102,32 +97,7 @@ func (p *Plot) BindWithScale(prop, col string, scale Scaler) *Plot {
 	panic("unknown column: " + col)
 haveCol:
 
-	// Create a binding.
-	b := binding{col: col}
-	if scale != nil {
-		b.scales = map[table.GroupID]Scaler{table.RootGroupID: scale}
-	} else {
-		if i := strings.Index(prop, "_"); i >= 0 {
-			// Find the scale of the base binding, if any.
-			scaleName := prop[:i]
-			if b2 := p.getBinding(scaleName); b2 != nil {
-				// Copy the scale tree from b2.
-				b.scales = b2.scales
-			}
-		}
-
-		if b.scales == nil {
-			// Choose the default scale for this data.
-			seq := data.Table(data.Tables()[0]).Column(col)
-			scale, err := DefaultScale(seq)
-			if err != nil {
-				panic(err)
-			}
-			b.scales = map[table.GroupID]Scaler{table.RootGroupID: scale}
-		}
-	}
-
-	p.env.bindings[prop] = &b
+	p.env.bindings[prop] = &binding{col: col}
 	return p
 }
 
@@ -174,14 +144,73 @@ func (p *Plot) bindings() []string {
 	return bs
 }
 
+type scalerTree struct {
+	scales map[table.GroupID]Scaler
+}
+
+func newScalerTree(s Scaler) scalerTree {
+	// TODO: If I already have a faceting, perhaps this needs to
+	// re-apply the faceting to s to split up this scale.
+	return scalerTree{map[table.GroupID]Scaler{
+		table.RootGroupID: s,
+	}}
+}
+
+func (t scalerTree) find(gid table.GroupID) Scaler {
+	for {
+		if s, ok := t.scales[gid]; ok {
+			return s
+		}
+		if gid == table.RootGroupID {
+			// TODO: This could happen if an operation
+			// that creates non-root scales (faceting) and
+			// then flattened the data or set new data.
+			// Maybe setting new data needs to check that
+			// all scales still apply?
+			panic("no scale for group " + gid.String())
+		}
+		gid = gid.Parent()
+	}
+}
+
+// Scale binds a scale to the given visual aesthetic.
+//
+// Scale returns p for ease of chaining.
+func (p *Plot) Scale(aes string, s Scaler) *Plot {
+	// TODO: Should aes be an enum so you can't mix up aesthetics
+	// and column names?
+
+	// TODO: Should scales actually be scoped or global to the
+	// plot, given that you can override them anyway? For example,
+	// if I create a default scale, I probably want to bind it in
+	// the root environment. Also, given that scales are bound to
+	// aesthetics, they are independent of what columns/bindings
+	// exist. If I take scales out of the scoping and eliminate
+	// bindings, then scopes are just about the Plot data (and
+	// maybe scale transforms), which probably makes sense since
+	// things like stats are data transforms.
+
+	// Bind this scale.
+	p.env.scales[aes] = newScalerTree(s)
+
+	// Add s to aes's scale set.
+	ss := p.scaleSet[aes]
+	if ss == nil {
+		ss = make(map[Scaler]bool)
+		p.scaleSet[aes] = ss
+	}
+	ss[s] = true
+	return p
+}
+
 type scaledDataKey struct {
 	data table.Grouping
 	b    *binding
 }
 
-// use marks a binding as in-use by a mark, adds the binding's data to
-// the domain of the binding's scale, attaches it to a rendering
-// aesthetic, and returns the scaled data.
+// use marks a binding as in-use by a mark, finds the aesthetic's
+// scale (creating it if necessary), adds the binding's data to the
+// domain of the scale, and returns the scaled data.
 //
 // b may be nil, in which case it simply returns nil. This is
 // convenient in combination with getBinding for an optional binding.
@@ -199,27 +228,16 @@ func (p *Plot) use(aes string, b *binding) *scaledData {
 			seqs: make(map[table.GroupID]scaledSeq),
 		}
 
-		for _, gid := range p.Data().Tables() {
-			// Find the scale.
-			var scaler Scaler
-			for gid := gid; ; gid = gid.Parent() {
-				if s, ok := b.scales[gid]; ok {
-					scaler = s
-					break
-				}
-				if gid == table.RootGroupID {
-					// TODO: This could happen if
-					// an operation that creates
-					// non-root scales (faceting)
-					// and then flattened the data
-					// or set new data. Maybe
-					// setting new data needs to
-					// check that all scales still
-					// apply?
-					panic("no scale for group " + gid.String())
-				}
+		// Get the scale tree.
+		var scales scalerTree
+		for e := p.env; e != nil; e = e.parent {
+			if st, ok := e.scales[aes]; ok {
+				scales = st
+				break
 			}
+		}
 
+		for _, gid := range p.Data().Tables() {
 			var seq table.Slice
 			table := p.Data().Table(gid)
 			if b.isConstant {
@@ -236,6 +254,32 @@ func (p *Plot) use(aes string, b *binding) *scaledData {
 				seq = table.MustColumn(b.col)
 			}
 
+			// Find or create the scale.
+			var scaler Scaler
+			if scales.scales == nil {
+				var err error
+				scaler, err = DefaultScale(seq)
+				if err != nil {
+					panic(&generic.TypeError{reflect.TypeOf(seq), nil, err.Error()})
+				}
+				// TODO: If scales were global, I
+				// could just call Scale here.
+				scales = newScalerTree(scaler)
+				rootEnv := p.env
+				for rootEnv.parent != nil {
+					rootEnv = rootEnv.parent
+				}
+				rootEnv.scales[aes] = scales
+				ss := p.scaleSet[aes]
+				if ss == nil {
+					ss = make(map[Scaler]bool)
+					p.scaleSet[aes] = ss
+				}
+				ss[scaler] = true
+			} else {
+				scaler = scales.find(gid)
+			}
+
 			// Train the scale.
 			scaler.ExpandDomain(seq)
 
@@ -246,33 +290,26 @@ func (p *Plot) use(aes string, b *binding) *scaledData {
 		p.scaledData[scaledDataKey{p.Data(), b}] = sd
 	}
 
-	// Add it to the aesthetic mappings.
-	am := p.aesMap[aes]
-	if am == nil {
-		am = make(map[*scaledData]bool)
-		p.aesMap[aes] = am
-	}
-	am[sd] = true
-
 	return sd
 }
 
-// Save saves the current data table and bindings of p to a stack.
-// This creates a new scope for declaring bindings: all of the
-// existing bindings continue to be available, but new bindings can be
-// created in the scope and existing bindings can be shadowed by new
-// bindings of the same name.
+// Save saves the current data table, bindings, and scales of p to a
+// stack. It creates a new scope for declaring bindings and scales:
+// all of the existing bindings continue to be available, but new
+// bindings can be created in the scope and existing bindings can be
+// shadowed by new bindings of the same name.
 func (p *Plot) Save() *Plot {
 	p.env = &plotEnv{
 		parent:   p.env,
 		data:     p.env.data,
 		bindings: make(map[string]*binding),
+		scales:   make(map[string]scalerTree),
 	}
 	return p
 }
 
-// Restore restores the data table and bindings of p from the save
-// stack. The exits the current bindings scope.
+// Restore restores the data table, bindings, and scales of p from the
+// save stack. That is, it exits the current bindings scope.
 func (p *Plot) Restore() *Plot {
 	if p.env.parent == nil {
 		panic("unbalanced Save/Restore")

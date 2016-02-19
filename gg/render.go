@@ -26,15 +26,11 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 	// the renderEnv in when ranging.
 
 	// Set scale ranges.
-	for sd := range p.aesMap["x"] {
-		for _, sseq := range sd.seqs {
-			sseq.scaler.Ranger(NewFloatRanger(0, float64(width)))
-		}
+	for s := range p.scaleSet["x"] {
+		s.Ranger(NewFloatRanger(0, float64(width)))
 	}
-	for sd := range p.aesMap["y"] {
-		for _, sseq := range sd.seqs {
-			sseq.scaler.Ranger(NewFloatRanger(float64(height), 0))
-		}
+	for s := range p.scaleSet["y"] {
+		s.Ranger(NewFloatRanger(float64(height), 0))
 	}
 
 	// XXX Default ranges for other things like color.
