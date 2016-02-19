@@ -45,13 +45,18 @@ func main() {
 	plot.GroupAuto()
 	plot.Add(gg.LayerLines())
 
+	plot.Save()
 	plot.SetData(ggstat.ECDF(plot.Data(), "x", ""))
-	// XXX Something is wrong here because the existing y binding
-	// no longer matches up with the columns. Hence, we have to
-	// re-bind it, *but* that creates a new Y scale.
 	plot.Bind("x", "x").Bind("y", "cumulative density")
 	plot.Add(gg.LayerSteps(gg.StepHV))
 	//plot.Add(gg.LayerSteps(gg.StepHMid))
+	plot.Restore()
+
+	plot.Save()
+	plot.SetData(ggstat.Density{X: "x"}.F(plot.Data()))
+	plot.Bind("x", "x").Bind("y", "probability density")
+	plot.Add(gg.LayerPaths())
+	plot.Restore()
 
 	plot.WriteSVG(os.Stdout, 400, 300)
 }
