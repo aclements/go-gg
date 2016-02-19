@@ -19,14 +19,9 @@ import (
 // that is, if two values in the first column are equal, they are
 // sorted by the second column, and so on.
 func SortBy(g Grouping, cols ...string) Grouping {
-	// TODO: Consider a generic MapConcatGroups.
-
 	// Sort each group.
-	out := Grouping(new(Table))
 	sorters := make([]sort.Interface, len(cols))
-	for _, gid := range g.Tables() {
-		t := g.Table(gid)
-
+	return MapTables(func(_ GroupID, t *Table) *Table {
 		// Create sorters for each column.
 		sorters = sorters[:0]
 		for _, col := range cols {
@@ -41,8 +36,7 @@ func SortBy(g Grouping, cols ...string) Grouping {
 		if len(sorters) == 0 {
 			// Avoid shuffling everything by the identity
 			// permutation.
-			out = out.AddTable(gid, t)
-			continue
+			return t
 		}
 
 		// Generate an initial permutation sequence.
@@ -61,10 +55,8 @@ func SortBy(g Grouping, cols ...string) Grouping {
 			seq = generic.MultiIndex(seq, perm)
 			nt = nt.Add(name, seq)
 		}
-		out = out.AddTable(gid, nt)
-	}
-
-	return out
+		return nt
+	}, g)
 }
 
 type permSort struct {

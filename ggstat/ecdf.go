@@ -30,12 +30,8 @@ import (
 // TODO: Since this operates on a table.Grouping, it can't account for
 // scale transforms. Should it operate on a Plot instead?
 func ECDF(g table.Grouping, xcol, wcol string) table.Grouping {
-	out := table.Grouping(new(table.Table))
-
 	g = table.SortBy(g, xcol)
-	for _, gid := range g.Tables() {
-		t := g.Table(gid)
-
+	return table.MapTables(func(_ table.GroupID, t *table.Table) *table.Table {
 		// Get input columns.
 		// TODO: Coerce to []float64
 		xs := t.MustColumn(xcol).([]float64)
@@ -46,8 +42,7 @@ func ECDF(g table.Grouping, xcol, wcol string) table.Grouping {
 
 		// Ignore empty tables.
 		if len(xs) == 0 {
-			out = out.AddTable(gid, new(table.Table).Add(xcol, []float64{}).Add("cumulative density", []float64{}))
-			continue
+			return new(table.Table).Add(xcol, []float64{}).Add("cumulative density", []float64{})
 		}
 
 		// Create output columns.
@@ -89,7 +84,6 @@ func ECDF(g table.Grouping, xcol, wcol string) table.Grouping {
 		xo[0], yo[0] = xs[0]-(margin*span), 0
 		xo, yo = append(xo, xs[len(xs)-1]+(margin*span)), append(yo, 1)
 
-		out = out.AddTable(gid, new(table.Table).Add(xcol, xo).Add("cumulative density", yo))
-	}
-	return out
+		return new(table.Table).Add(xcol, xo).Add("cumulative density", yo)
+	}, g)
 }
