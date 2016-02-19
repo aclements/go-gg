@@ -23,7 +23,8 @@ var Warning = log.New(os.Stderr, "[gg]", log.Lshortfile)
 type Plot struct {
 	//facet  facet
 
-	env *plotEnv
+	env    *plotEnv
+	scales map[string]scalerTree
 
 	scaledData map[scaledDataKey]*scaledData
 	scaleSet   map[string]map[Scaler]bool
@@ -35,8 +36,8 @@ func NewPlot(data table.Grouping) *Plot {
 		env: &plotEnv{
 			data:     data,
 			bindings: make(map[string]*binding),
-			scales:   make(map[string]scalerTree),
 		},
+		scales:     make(map[string]scalerTree),
 		scaledData: make(map[scaledDataKey]*scaledData),
 		scaleSet:   make(map[string]map[Scaler]bool),
 	}
@@ -47,7 +48,6 @@ type plotEnv struct {
 	parent   *plotEnv
 	data     table.Grouping
 	bindings map[string]*binding
-	scales   map[string]scalerTree
 }
 
 // A binding combines a set of data values (such as numeric values or
@@ -180,18 +180,8 @@ func (p *Plot) Scale(aes string, s Scaler) *Plot {
 	// TODO: Should aes be an enum so you can't mix up aesthetics
 	// and column names?
 
-	// TODO: Should scales actually be scoped or global to the
-	// plot, given that you can override them anyway? For example,
-	// if I create a default scale, I probably want to bind it in
-	// the root environment. Also, given that scales are bound to
-	// aesthetics, they are independent of what columns/bindings
-	// exist. If I take scales out of the scoping and eliminate
-	// bindings, then scopes are just about the Plot data (and
-	// maybe scale transforms), which probably makes sense since
-	// things like stats are data transforms.
-
 	// Bind this scale.
-	p.env.scales[aes] = newScalerTree(s)
+	p.scales[aes] = newScalerTree(s)
 
 	// Add s to aes's scale set.
 	ss := p.scaleSet[aes]
@@ -229,13 +219,7 @@ func (p *Plot) use(aes string, b *binding) *scaledData {
 		}
 
 		// Get the scale tree.
-		var scales scalerTree
-		for e := p.env; e != nil; e = e.parent {
-			if st, ok := e.scales[aes]; ok {
-				scales = st
-				break
-			}
-		}
+		scales := p.scales[aes]
 
 		for _, gid := range p.Data().Tables() {
 			var seq table.Slice
@@ -262,23 +246,10 @@ func (p *Plot) use(aes string, b *binding) *scaledData {
 				if err != nil {
 					panic(&generic.TypeError{reflect.TypeOf(seq), nil, err.Error()})
 				}
-				// TODO: If scales were global, I
-				// could just call Scale here.
-				scales = newScalerTree(scaler)
-				rootEnv := p.env
-				for rootEnv.parent != nil {
-					rootEnv = rootEnv.parent
-				}
-				rootEnv.scales[aes] = scales
-				ss := p.scaleSet[aes]
-				if ss == nil {
-					ss = make(map[Scaler]bool)
-					p.scaleSet[aes] = ss
-				}
-				ss[scaler] = true
-			} else {
-				scaler = scales.find(gid)
+				p.Scale(aes, scaler)
+				scales = p.scales[aes]
 			}
+			scaler = scales.find(gid)
 
 			// Train the scale.
 			scaler.ExpandDomain(seq)
@@ -293,23 +264,22 @@ func (p *Plot) use(aes string, b *binding) *scaledData {
 	return sd
 }
 
-// Save saves the current data table, bindings, and scales of p to a
-// stack. It creates a new scope for declaring bindings and scales:
-// all of the existing bindings continue to be available, but new
-// bindings can be created in the scope and existing bindings can be
-// shadowed by new bindings of the same name.
+// Save saves the current data table and bindings of p to a stack. It
+// creates a new scope for declaring bindings: all of the existing
+// bindings continue to be available, but new bindings can be created
+// in the scope and existing bindings can be shadowed by new bindings
+// of the same name.
 func (p *Plot) Save() *Plot {
 	p.env = &plotEnv{
 		parent:   p.env,
 		data:     p.env.data,
 		bindings: make(map[string]*binding),
-		scales:   make(map[string]scalerTree),
 	}
 	return p
 }
 
-// Restore restores the data table, bindings, and scales of p from the
-// save stack. That is, it exits the current bindings scope.
+// Restore restores the data table and bindings of p from the save
+// stack. That is, it exits the current bindings scope.
 func (p *Plot) Restore() *Plot {
 	if p.env.parent == nil {
 		panic("unbalanced Save/Restore")
