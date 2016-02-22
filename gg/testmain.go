@@ -41,21 +41,18 @@ func main() {
 	tab := new(table.Table).Add("x", xs).Add("y", ys).Add("which", which)
 
 	plot := gg.NewPlot(tab)
-	plot.Bind("x", "x").Bind("y", "y")
 	plot.GroupAuto()
-	plot.Add(gg.LayerLines())
+	plot.Add(gg.LayerLines{gg.LayerPaths{X: "x", Y: "y"}})
 
 	plot.Save()
 	plot.SetData(ggstat.ECDF(plot.Data(), "x", ""))
-	plot.Bind("x", "x").Bind("y", "cumulative density")
-	plot.Add(gg.LayerSteps(gg.StepHV))
-	//plot.Add(gg.LayerSteps(gg.StepHMid))
+	plot.Add(gg.LayerSteps{Step: gg.StepHV})
+	//plot.Add(gg.LayerSteps{Step:gg.StepHMid})
 	plot.Restore()
 
 	plot.Save()
 	plot.SetData(ggstat.Density{X: "x"}.F(plot.Data()))
-	plot.Bind("x", "x").Bind("y", "probability density")
-	plot.Add(gg.LayerPaths())
+	plot.Add(gg.LayerPaths{})
 	plot.Restore()
 
 	plot.WriteSVG(os.Stdout, 400, 300)

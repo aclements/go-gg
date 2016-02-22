@@ -16,6 +16,7 @@ import (
 // GroupBy sub-divides all groups such that all of the rows in each
 // group have equal values for all of the named columns.
 func (p *Plot) GroupBy(cols ...string) *Plot {
+	// TODO: Should this accept column expressions, like layers?
 	return p.SetData(table.GroupBy(p.Data(), cols...))
 }
 

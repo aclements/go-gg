@@ -5,9 +5,11 @@
 package gg
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"reflect"
+	"strconv"
 
 	"github.com/aclements/go-gg/generic"
 	"github.com/aclements/go-gg/table"
@@ -34,8 +36,7 @@ type Plot struct {
 func NewPlot(data table.Grouping) *Plot {
 	p := &Plot{
 		env: &plotEnv{
-			data:     data,
-			bindings: make(map[string]*binding),
+			data: data,
 		},
 		scales:     make(map[string]scalerTree),
 		scaledData: make(map[scaledDataKey]*scaledData),
@@ -45,24 +46,13 @@ func NewPlot(data table.Grouping) *Plot {
 }
 
 type plotEnv struct {
-	parent   *plotEnv
-	data     table.Grouping
-	bindings map[string]*binding
-}
-
-// A binding combines a set of data values (such as numeric values or
-// factors) with a set of scales for mapping them to visual properties
-// (such as position or color).
-type binding struct {
-	isConstant bool
-	col        string
-	constant   interface{}
+	parent *plotEnv
+	data   table.Grouping
 }
 
 // SetData sets p's current data table. The caller must not modify
 // data in this table after this point.
 func (p *Plot) SetData(data table.Grouping) *Plot {
-	// TODO: Check that all bindings are valid in the new table?
 	p.env.data = data
 	return p
 }
@@ -70,78 +60,6 @@ func (p *Plot) SetData(data table.Grouping) *Plot {
 // Data returns p's current data table.
 func (p *Plot) Data() table.Grouping {
 	return p.env.data
-}
-
-// TODO: How to bind constants?
-
-// Bind binds the data in column col to property prop, so layers can
-// look up the data bound to properties they use.
-//
-// By convention, the scale used for a property has the same name as
-// that property, but is there is a "_" in the property name, it and
-// everything after it are stripped to get the scale name.
-//
-// Bind returns p for ease of method chaining.
-//
-// TODO: Now that the binding doesn't track its own scale, this seems
-// extra silly.
-func (p *Plot) Bind(prop, col string) *Plot {
-	data := p.env.data
-
-	// Check col.
-	for _, col2 := range data.Columns() {
-		if col == col2 {
-			goto haveCol
-		}
-	}
-	panic("unknown column: " + col)
-haveCol:
-
-	p.env.bindings[prop] = &binding{col: col}
-	return p
-}
-
-func (p *Plot) unbindAll() *Plot {
-	for _, name := range p.bindings() {
-		p.env.bindings[name] = nil
-	}
-	return p
-}
-
-// TODO: Make these public. Might want to just return the name, data,
-// and scale rather than the internal struct. OTOH, that would make
-// bindings() difficult.
-
-func (p *Plot) getBinding(name string) *binding {
-	for e := p.env; e != nil; e = e.parent {
-		if b, ok := e.bindings[name]; ok {
-			return b
-		}
-	}
-	return nil
-}
-
-func (p *Plot) mustGetBinding(name string) *binding {
-	if b := p.getBinding(name); b != nil {
-		return b
-	}
-	panic("unknown binding: " + name)
-}
-
-func (p *Plot) bindings() []string {
-	bs := make([]string, 0, len(p.env.bindings))
-	have := make(map[string]bool)
-	for e := p.env; e != nil; e = e.parent {
-		for name, b := range e.bindings {
-			if !have[name] {
-				have[name] = true
-				if b != nil {
-					bs = append(bs, name)
-				}
-			}
-		}
-	}
-	return bs
 }
 
 type scalerTree struct {
@@ -195,23 +113,34 @@ func (p *Plot) Scale(aes string, s Scaler) *Plot {
 
 type scaledDataKey struct {
 	data table.Grouping
-	b    *binding
+	col  string
 }
 
-// use marks a binding as in-use by a mark, finds the aesthetic's
-// scale (creating it if necessary), adds the binding's data to the
-// domain of the scale, and returns the scaled data.
+// use binds a column of data to an aesthetic. It creates the
+// aesthetic's scale if necessary, expands its domain to include the
+// data in col, and returns the scaled data.
 //
-// b may be nil, in which case it simply returns nil. This is
-// convenient in combination with getBinding for an optional binding.
+// col may be "", in which case it simply returns nil.
 //
 // TODO: Should aes be an enum?
-func (p *Plot) use(aes string, b *binding) *scaledData {
-	if b == nil {
+func (p *Plot) use(aes string, col string) *scaledData {
+	if col == "" {
 		return nil
 	}
 
-	sd := p.scaledData[scaledDataKey{p.Data(), b}]
+	if col[0] == '@' {
+		// TODO: Document this.
+		n, err := strconv.Atoi(col[1:])
+		if err == nil {
+			cols := p.Data().Columns()
+			if n >= len(cols) {
+				panic(fmt.Sprintf("column index %d out of range; table has %d columns", n, len(cols)))
+			}
+			col = cols[n]
+		}
+	}
+
+	sd := p.scaledData[scaledDataKey{p.Data(), col}]
 	if sd == nil {
 		// Construct the scaledData.
 		sd = &scaledData{
@@ -222,21 +151,10 @@ func (p *Plot) use(aes string, b *binding) *scaledData {
 		scales := p.scales[aes]
 
 		for _, gid := range p.Data().Tables() {
-			var seq table.Slice
 			table := p.Data().Table(gid)
-			if b.isConstant {
-				// Create the sequence.
-				len := table.Len()
-				sv := reflect.MakeSlice(reflect.SliceOf(reflect.TypeOf(b.constant)), len, len)
-				cv := reflect.ValueOf(b.constant)
-				for i := 0; i < len; i++ {
-					sv.Index(i).Set(cv)
-				}
-				seq = sv.Interface()
-			} else {
-				// Get the data.
-				seq = table.MustColumn(b.col)
-			}
+
+			// Get the data.
+			seq := table.MustColumn(col)
 
 			// Find or create the scale.
 			var scaler Scaler
@@ -258,43 +176,35 @@ func (p *Plot) use(aes string, b *binding) *scaledData {
 			sd.seqs[gid] = scaledSeq{seq, scaler}
 		}
 
-		p.scaledData[scaledDataKey{p.Data(), b}] = sd
+		p.scaledData[scaledDataKey{p.Data(), col}] = sd
 	}
 
 	return sd
 }
 
-// Save saves the current data table and bindings of p to a stack. It
-// creates a new scope for declaring bindings: all of the existing
-// bindings continue to be available, but new bindings can be created
-// in the scope and existing bindings can be shadowed by new bindings
-// of the same name.
+// Save saves the current data table of p to a stack.
 func (p *Plot) Save() *Plot {
 	p.env = &plotEnv{
-		parent:   p.env,
-		data:     p.env.data,
-		bindings: make(map[string]*binding),
+		parent: p.env,
+		data:   p.env.data,
 	}
 	return p
 }
 
-// Restore restores the data table and bindings of p from the save
-// stack. That is, it exits the current bindings scope.
+// Restore restores the data table of p from the save stack.
 func (p *Plot) Restore() *Plot {
 	if p.env.parent == nil {
 		panic("unbalanced Save/Restore")
 	}
 	p.env = p.env.parent
-	// TODO: Clear unwound bindings from p.used.
 	return p
 }
 
-// TODO: Maybe Plotter should be an interface so types can satisfy it?
-// This might be a nice way to add Bindings to a plot.
+type Plotter interface {
+	Apply(*Plot)
+}
 
-type Plotter func(p *Plot)
-
-func (p *Plot) Add(o Plotter) *Plot {
-	o(p)
+func (p *Plot) Add(plotter Plotter) *Plot {
+	plotter.Apply(p)
 	return p
 }
