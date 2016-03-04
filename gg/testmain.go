@@ -42,7 +42,7 @@ func main() {
 
 	plot := gg.NewPlot(tab)
 	plot.GroupAuto()
-	plot.Add(gg.LayerLines{gg.LayerPaths{X: "x", Y: "y"}})
+	plot.Add(gg.LayerLines{X: "x", Y: "y"})
 
 	plot.Save()
 	plot.SetData(ggstat.ECDF(plot.Data(), "x", ""))

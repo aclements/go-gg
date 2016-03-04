@@ -6,14 +6,12 @@ package gg
 
 // LayerLines is like LayerPaths, but connects data points in order by
 // the "x" property.
-type LayerLines struct {
-	LayerPaths
-}
+type LayerLines LayerPaths
 
 func (l LayerLines) Apply(p *Plot) {
 	defer p.Save().Restore()
 	p = p.SortBy(l.X)
-	l.LayerPaths.Apply(p)
+	LayerPaths(l).Apply(p)
 }
 
 //go:generate stringer -type StepMode
