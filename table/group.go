@@ -183,15 +183,13 @@ func concatRows(tabs ...*Table) *Table {
 
 	// Construct each column.
 	out := new(Table)
-	seqs := make([]reflect.Value, len(tabs))
+	seqs := make([]generic.Slice, len(tabs))
 	for _, col := range tabs[0].Columns() {
 		seqs = seqs[:0]
 		for _, tab := range tabs {
-			seqs = append(seqs, reflect.ValueOf(tab.Column(col)))
+			seqs = append(seqs, tab.Column(col))
 		}
-		nilSeq := reflect.Zero(reflect.TypeOf(seqs[0]))
-		newSeq := reflect.Append(nilSeq, seqs...)
-		out = out.Add(col, newSeq)
+		out = out.Add(col, generic.Concat(seqs...))
 	}
 
 	return out
