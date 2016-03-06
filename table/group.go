@@ -5,8 +5,9 @@
 package table
 
 import (
+	"fmt"
 	"reflect"
-	"strconv"
+	"strings"
 
 	"github.com/aclements/go-gg/generic"
 )
@@ -22,36 +23,34 @@ var RootGroupID = GroupID{}
 
 type groupNode struct {
 	parent GroupID
-	label  string
+	label  interface{}
 }
 
 // String returns the path to GroupID g in the form "/l1/l2/l3". If g
-// is RootGroupID, it returns "/". Note that this is purely
-// diagnostic; this string may not uniquely identify g.
+// is RootGroupID, it returns "/". Each level in the group is formed
+// by formatting the label using fmt's "%v" verb. Note that this is
+// purely diagnostic; this string may not uniquely identify g.
 func (g GroupID) String() string {
 	if g == RootGroupID {
 		return "/"
 	}
-	buflen := 0
+	parts := []string{}
 	for p := g; p != RootGroupID; p = p.parent {
-		buflen += len(p.label) + 1
+		part := fmt.Sprintf("/%v", p.label)
+		parts = append(parts, part)
 	}
-	buf := make([]byte, buflen)
-	bufpos := len(buf)
-	for p := g; p != RootGroupID; p = p.parent {
-		bufpos -= len(p.label)
-		copy(buf[bufpos:], p.label)
-		bufpos--
-		buf[bufpos] = '/'
+	for i, j := 0, len(parts)-1; i < j; i, j = i+1, j-1 {
+		parts[i], parts[j] = parts[j], parts[i]
 	}
-	return string(buf)
+	return strings.Join(parts, "")
 }
 
 // Extend returns a new GroupID that is a child of GroupID g. The
-// returned GroupID will not be equal to any existing GroupID. The
-// label is purely diagnostic; nothing enforces the uniqueness of this
-// label within g.
-func (g GroupID) Extend(label string) GroupID {
+// returned GroupID will not be equal to any existing GroupID (even if
+// label is not unique among g's children). The label is primarily
+// diagnostic; the table package uses it only when printing tables,
+// but callers may store semantic information in group labels.
+func (g GroupID) Extend(label interface{}) GroupID {
 	return GroupID{&groupNode{g, label}}
 }
 
@@ -62,6 +61,11 @@ func (g GroupID) Parent() GroupID {
 		return RootGroupID
 	}
 	return g.parent
+}
+
+// Label returns the label of g.
+func (g GroupID) Label() interface{} {
+	return g.label
 }
 
 // GroupBy sub-divides all groups such that all of the rows in each
@@ -90,7 +94,7 @@ func GroupBy(g Grouping, cols ...string) Grouping {
 			x := seq.Index(i).Interface()
 			subgid, ok := gidkey[x]
 			if !ok {
-				subgid = gid.Extend(strconv.Itoa(len(subgroups)))
+				subgid = gid.Extend(x)
 				subgroups = append(subgroups, subgid)
 				gidkey[x] = subgid
 				rowsMap[subgid] = []int{}

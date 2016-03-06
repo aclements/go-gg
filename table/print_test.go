@@ -49,10 +49,10 @@ func ExampleFprint_Groups() {
 	Fprint(os.Stdout, g)
 	// Output:
 	// name       terms state
-	// -- /0
+	// -- /Virginia
 	// Washington     2 Virginia
 	// Jefferson      2 Virginia
-	// -- /1
+	// -- /Massachusetts
 	// Adams          1 Massachusetts
 }
 
