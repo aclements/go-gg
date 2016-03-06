@@ -4,9 +4,10 @@
 
 package generic
 
-// MultiIndex returns a slice w such that w[i] = v[indexes[i]]. v must
-// be a slice, array, or pointer to array.
-func MultiIndex(v interface{}, indexes []int) interface{} {
+import "reflect"
+
+// MultiIndex returns a slice w such that w[i] = v[indexes[i]].
+func MultiIndex(v Slice, indexes []int) Slice {
 	switch v := v.(type) {
 	case []int:
 		res := make([]int, len(indexes))
@@ -30,8 +31,8 @@ func MultiIndex(v interface{}, indexes []int) interface{} {
 		return res
 	}
 
-	rv := sequence(v)
-	res := newSequence(rv.Type(), len(indexes), len(indexes))
+	rv := reflectSlice(v)
+	res := reflect.MakeSlice(rv.Type(), len(indexes), len(indexes))
 	for i, x := range indexes {
 		res.Index(i).Set(rv.Index(x))
 	}

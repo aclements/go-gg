@@ -6,12 +6,22 @@ package generic
 
 import "reflect"
 
-// TODO: This would all be *much* simpler if I just said everything
-// had to be a slice. Arrays also have the annoying property that I
-// often can't retain their true type, whereas if a slice is wrapped
-// in a named type, I can make a new slice with the same named type.
-// OTOH, in-place operations like sorting make perfect sense on
-// arrays.
+// A Slice is a Go slice value.
+//
+// This is primarily for documentation. There is no way to statically
+// enforce this in Go; however, functions that expect a Slice will
+// panic with a *TypeError if passed a non-slice value.
+type Slice interface{}
+
+// reflectSlice checks that s is a slice and returns its
+// reflect.Value. It panics with a *TypeError if s is not a slice.
+func reflectSlice(s Slice) reflect.Value {
+	rv := reflect.ValueOf(s)
+	if rv.Kind() != reflect.Slice {
+		panic(&TypeError{rv.Type(), nil, "is not a slice"})
+	}
+	return rv
+}
 
 // sequence returns the reflect.Value of x that is safe to Index. x
 // must be an array, slice, or pointer to an array. If x is a pointer
@@ -31,24 +41,4 @@ func sequence(x interface{}) reflect.Value {
 	}
 
 	panic(&TypeError{rv.Type(), nil, "is not a sequence type"})
-}
-
-// newSequence returns a new slice with the specified length and cap.
-// If typ is a slice type, the returned slice will have the same type.
-// If typ is an array type, the returned slice will have the same
-// element type.
-func newSequence(typ reflect.Type, len, cap int) reflect.Value {
-	switch typ.Kind() {
-	case reflect.Slice:
-		// Retain the slice's actual type.
-		return reflect.MakeSlice(typ, len, cap)
-
-	case reflect.Array:
-		// Create a new slice type with the same element type.
-		typ = reflect.SliceOf(typ.Elem())
-		return reflect.MakeSlice(typ, len, cap)
-
-	default:
-		panic(&TypeError{typ, nil, "not a slice or array type"})
-	}
 }

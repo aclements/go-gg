@@ -26,12 +26,6 @@ func TestMultiIndex(t *testing.T) {
 	if want := []T{{3}, {2}, {1}}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("expected %v, got %v", want, got)
 	}
-
-	x3 := [...]int{1, 2, 3}
-	got = MultiIndex(x3, []int{0})
-	if want := []int{1}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("expected %v, got %v", want, got)
-	}
 }
 
 func TestMultiIndexType(t *testing.T) {

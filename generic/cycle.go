@@ -6,13 +6,12 @@ package generic
 
 import "reflect"
 
-// Cycle constructs a sequence of length length by repeatedly
-// concatenating seq to itself. If len(seq) >= length, it will slice
-// seq to length. Otherwise, it will allocate a new slice. Regardless
-// of seq's type, Cycle always returns a slice. If len(seq) == 0 and
+// Cycle constructs a slice of length length by repeatedly
+// concatenating s to itself. If len(s) >= length, it returns
+// s[:length]. Otherwise, it allocates a new slice. If len(s) == 0 and
 // length != 0, Cycle panics.
-func Cycle(seq interface{}, length int) interface{} {
-	rv := sequence(seq)
+func Cycle(s Slice, length int) Slice {
+	rv := reflectSlice(s)
 	if rv.Len() >= length {
 		return rv.Slice(0, length).Interface()
 	}
@@ -22,7 +21,7 @@ func Cycle(seq interface{}, length int) interface{} {
 	}
 
 	// Allocate a new slice of the appropriate length.
-	out := newSequence(rv.Type(), length, length)
+	out := reflect.MakeSlice(rv.Type(), length, length)
 
 	// Copy elements to out.
 	for pos := 0; pos < length; {
