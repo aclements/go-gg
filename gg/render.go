@@ -13,7 +13,7 @@ import (
 )
 
 func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
-	// TODO: Perform layout.
+	// TODO: Perform real layout.
 
 	// TODO: Check if the same scaler is used for multiple
 	// aesthetics with conflicting rangers.
@@ -25,29 +25,55 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 	// Rangers and configure them at this point, or we could pass
 	// the renderEnv in when ranging.
 
-	// Set scale ranges.
-	for s := range p.scaleSet["x"] {
-		s.Ranger(NewFloatRanger(0, float64(width)))
-	}
-	for s := range p.scaleSet["y"] {
-		s.Ranger(NewFloatRanger(float64(height), 0))
-	}
-
-	// XXX Default ranges for other things like color.
+	// TODO: Default ranges for other things like color.
 
 	// Create rendering environment.
 	env := &renderEnv{cache: make(map[renderCacheKey]table.Slice)}
 
-	// Render.
-	svg := svg.New(w)
-	svg.Start(width, height)
-	for _, plotMark := range p.marks {
-		for _, gid := range plotMark.groups {
-			env.gid = gid
-			plotMark.m.mark(env, svg)
+	// Split up marks by subplot.
+	//
+	// TODO: If a mark was done in a parent subplot, broadcast it
+	// to all child leafs of that subplot.
+	subplots := make(map[*subplot][]plotMark)
+	for _, mark := range p.marks {
+		for _, gid := range mark.groups {
+			subplot := subplotOf(gid)
+			subplots[subplot] = append(subplots[subplot], mark)
 		}
 	}
-	svg.End()
+
+	svg := svg.New(w)
+	svg.Start(width, height)
+	defer svg.End()
+
+	// Render each subplot.
+	for subplot, marks := range subplots {
+		// Set scale ranges.
+		//
+		// TODO: Do this only for the scales used by this
+		// subplot.
+		for s := range p.scaleSet["x"] {
+			s.Ranger(NewFloatRanger(float64(width)*subplot.l, float64(width)*subplot.r))
+		}
+		for s := range p.scaleSet["y"] {
+			s.Ranger(NewFloatRanger(float64(height)*subplot.b, float64(height)*subplot.t))
+		}
+
+		// Render marks.
+		for _, mark := range marks {
+			for _, gid := range mark.groups {
+				if subplotOf(gid) != subplot {
+					// TODO: Figure this out when
+					// we're building subplots.
+					// This is asymptotically
+					// inefficient.
+					continue
+				}
+				env.gid = gid
+				mark.m.mark(env, svg)
+			}
+		}
+	}
 
 	return nil
 }
