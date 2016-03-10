@@ -43,6 +43,7 @@ func main() {
 	plot := gg.NewPlot(tab)
 	plot.GroupAuto()
 	plot.Add(gg.FacetX{Col: "which"})
+	plot.Add(gg.FacetY{Col: "which"})
 	plot.Add(gg.LayerLines{X: "x", Y: "y"})
 
 	plot.Save()

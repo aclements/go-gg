@@ -109,7 +109,6 @@ func (f *FacetCommon) apply(p *Plot, dir string) {
 			valType = reflect.TypeOf(val)
 		}
 	}
-	n := float64(len(vals))
 
 	// If f.Col is orderable, order and re-index values.
 	if generic.CanOrderR(valType.Kind()) {
@@ -122,8 +121,6 @@ func (f *FacetCommon) apply(p *Plot, dir string) {
 			vals[valSeq.Index(i).Interface()].index = i
 		}
 	}
-
-	// TODO: Fill in subplot labels.
 
 	// Find existing subplots, split existing subplots into
 	// len(vals) new subplots, and transform each GroupBy group
@@ -139,15 +136,15 @@ func (f *FacetCommon) apply(p *Plot, dir string) {
 		if nsubplots == nil {
 			nsubplots = make([]*subplot, len(vals))
 			for _, val := range vals {
-				ns := &subplot{l: sub.l, r: sub.r,
-					t: sub.t, b: sub.b}
-				i := float64(val.index)
+				ns := &subplot{parent: sub}
 				if dir == "x" {
-					w := sub.r - sub.l
-					ns.l, ns.r = sub.l+w*i/n, sub.l+w*(i+1)/n
+					ns.col = val.index
+					ns.labelTop = val.label
+					ns.showLabelTop = true
 				} else {
-					h := sub.b - sub.t
-					ns.t, ns.b = sub.t+h*i/n, sub.t+h*(i+1)/n
+					ns.row = val.index
+					ns.labelRight = val.label
+					ns.showLabelRight = true
 				}
 				nsubplots[val.index] = ns
 			}
@@ -169,22 +166,21 @@ func (f *FacetCommon) apply(p *Plot, dir string) {
 }
 
 type subplot struct {
-	// TODO: Probably I want to specify something about grid
-	// layout rather than coordinates so layout can take care of
-	// things like margins and label positioning.
-	t, r, b, l float64
+	parent *subplot
 
-	// TODO: Need to track the subplot hierarchy to find
-	// higher-level labels.
+	// row and col are the row and column of this subplot in its
+	// parent, where 0, 0 is the top left.
+	row, col int
 
 	// TODO: Flags for which scale marks to show. Alternatively,
 	// if layout eliminates redundant labels, it should probably
 	// also figure out which scale marks to show.
 
-	labelTop, labelRight string
+	labelTop, labelRight         string
+	showLabelTop, showLabelRight bool
 }
 
-var rootSubplot = &subplot{r: 1, b: 1}
+var rootSubplot = &subplot{}
 
 func subplotOf(gid table.GroupID) *subplot {
 	for ; gid != table.RootGroupID; gid = gid.Parent() {
@@ -197,5 +193,5 @@ func subplotOf(gid table.GroupID) *subplot {
 }
 
 func (s subplot) String() string {
-	return fmt.Sprintf("[%g %g %g %g]", s.t, s.r, s.b, s.l)
+	return fmt.Sprintf("[%d %d]", s.col, s.row)
 }
