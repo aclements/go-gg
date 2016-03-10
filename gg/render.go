@@ -7,62 +7,13 @@ package gg
 import (
 	"io"
 	"reflect"
-	"sort"
 
-	"github.com/aclements/go-gg/gg/layout"
 	"github.com/aclements/go-gg/table"
 	"github.com/ajstarks/svgo"
 )
 
-type subplotInfo struct {
-	subplot *subplot
-	marks   []plotMark
-
-	rowPath, colPath subplotPath
-
-	// row and col are the global row and column of this subplot.
-	row, col int
-
-	layout *layout.Leaf
-}
-
-func (si *subplotInfo) getPaths() (rowPath, colPath subplotPath) {
-	if si.rowPath == nil {
-		var walk func(*subplot) (rp, cp subplotPath)
-		walk = func(s *subplot) (rp, cp subplotPath) {
-			if s == nil {
-				return subplotPath{}, subplotPath{}
-			}
-			rp, cp = walk(s.parent)
-			return append(rp, s.row), append(cp, s.col)
-		}
-		si.rowPath, si.colPath = walk(si.subplot)
-	}
-	return si.rowPath, si.colPath
-}
-
-type subplotPath []int
-
-func (a subplotPath) cmp(b subplotPath) int {
-	for k := 0; k < len(a) && k < len(b); k++ {
-		if a[k] != b[k] {
-			if a[k] < b[k] {
-				return -1
-			} else {
-				return 1
-			}
-		}
-	}
-	if len(a) < len(b) {
-		return -1
-	} else if len(a) > len(b) {
-		return 1
-	}
-	return 0
-}
-
 func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
-	// TODO: Scales marks, axis labels, facet labels.
+	// TODO: Scales marks, axis labels, legend.
 
 	// TODO: Check if the same scaler is used for multiple
 	// aesthetics with conflicting rangers.
@@ -79,6 +30,9 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 	// TODO: Expose the layout so a package user can put together
 	// multiple Plots.
 
+	// TODO: Let the user alternatively specify the width and
+	// height of the subplots, rather than the whole plot.
+
 	// Create rendering environment.
 	env := &renderEnv{cache: make(map[renderCacheKey]table.Slice)}
 
@@ -86,68 +40,56 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 	//
 	// TODO: If a mark was done in a parent subplot, broadcast it
 	// to all child leafs of that subplot.
-	subplots := make(map[*subplot]*subplotInfo)
-	subplotList := []*subplotInfo{}
+	subplots := make(map[*subplot]*plotElt)
+	plotElts := []*plotElt{}
 	for _, mark := range p.marks {
 		for _, gid := range mark.groups {
 			subplot := subplotOf(gid)
-			si := subplots[subplot]
-			if si == nil {
-				si = &subplotInfo{
-					subplot: subplot,
-				}
-				subplotList = append(subplotList, si)
-				subplots[subplot] = si
+			elt := subplots[subplot]
+			if elt == nil {
+				body, labels := newPlotElt(subplot)
+				plotElts = append(plotElts, body)
+				plotElts = append(plotElts, labels...)
+				subplots[subplot] = body
+				elt = body
 			}
-			si.marks = append(si.marks, mark)
+			elt.marks = append(elt.marks, mark)
 		}
 	}
 
-	// Construct the global subplot grid from the grid hierarchy.
-	// Do this by sorting the "row path" and "column path" to each
-	// leaf and computing global row/col of each leaf.
-	//
-	// TODO: This isn't very robust to weird faceting. Maybe
-	// faceting should be responsible for maintaining a top-level
-	// grid.
-	sort.Sort(subplotSorter{subplotList, false})
-	col, lastPath := -1, subplotPath(nil)
-	for _, si := range subplotList {
-		if lastPath.cmp(si.colPath) != 0 {
-			lastPath = si.colPath
-			col++
-		}
-		si.col = col
-	}
-	sort.Sort(subplotSorter{subplotList, true})
-	row, lastPath := -1, subplotPath(nil)
-	for _, si := range subplotList {
-		if lastPath.cmp(si.rowPath) != 0 {
-			lastPath = si.rowPath
-			row++
-		}
-		si.row = row
-	}
+	// Compute plot element layout.
+	layoutPlotElts(plotElts).SetLayout(0, 0, float64(width), float64(height))
 
-	// Construct the grid layout.
-	l := new(layout.Grid)
-	for _, si := range subplotList {
-		si.layout = new(layout.Leaf).SetFlex(true, true)
-		l.Add(si.layout, si.col, si.row, 1, 1)
-	}
-	l.SetLayout(0, 0, float64(width), float64(height))
-
+	// Draw.
 	svg := svg.New(w)
 	svg.Start(width, height)
 	defer svg.End()
 
-	// Render each subplot.
-	for _, si := range subplotList {
+	// Render each plot element.
+	for _, elt := range plotElts {
+		x, y, w, h := elt.layout.Layout()
+
+		if elt.typ == eltHLabel || elt.typ == eltVLabel {
+			// TODO: Theme.
+			//
+			// TODO: Clip to label region.
+			svg.Rect(int(x), int(y), int(w), int(h), "fill: #ccc")
+			style := `text-anchor="middle"`
+			if elt.typ == eltHLabel {
+				// Vertical centering is very poorly
+				// supported. dy is the best chance.
+				style += ` dy=".3em"`
+			} else if elt.typ == eltVLabel {
+				style += ` writing-mode="tb"`
+			}
+			svg.Text(int(x+w/2), int(y+h/2), elt.label, style)
+			continue
+		}
+
 		// Set scale ranges.
 		//
 		// TODO: Do this only for the scales used by this
 		// subplot.
-		x, y, w, h := si.layout.Layout()
 		for s := range p.scaleSet["x"] {
 			s.Ranger(NewFloatRanger(x, x+w))
 		}
@@ -156,9 +98,9 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 		}
 
 		// Render marks.
-		for _, mark := range si.marks {
+		for _, mark := range elt.marks {
 			for _, gid := range mark.groups {
-				if subplotOf(gid) != si.subplot {
+				if subplotOf(gid) != elt.subplot {
 					// TODO: Figure this out when
 					// we're building subplots.
 					// This is asymptotically
@@ -172,29 +114,6 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 	}
 
 	return nil
-}
-
-// subplotSorter sorts subplots by row or column path.
-type subplotSorter struct {
-	si    []*subplotInfo
-	byRow bool
-}
-
-func (s subplotSorter) Len() int {
-	return len(s.si)
-}
-
-func (s subplotSorter) Less(i, j int) bool {
-	rowPathI, colPathI := s.si[i].getPaths()
-	rowPathJ, colPathJ := s.si[j].getPaths()
-	if s.byRow {
-		return rowPathI.cmp(rowPathJ) < 0
-	}
-	return colPathI.cmp(colPathJ) < 0
-}
-
-func (s subplotSorter) Swap(i, j int) {
-	s.si[i], s.si[j] = s.si[j], s.si[i]
 }
 
 type renderEnv struct {
