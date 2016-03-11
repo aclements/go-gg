@@ -20,7 +20,7 @@ import (
 
 // Warning is a logger for reporting conditions that don't prevent the
 // production of a plot, but may lead to unexpected results.
-var Warning = log.New(os.Stderr, "[gg]", log.Lshortfile)
+var Warning = log.New(os.Stderr, "[gg] ", log.Lshortfile)
 
 type Plot struct {
 	//facet  facet
