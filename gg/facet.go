@@ -16,15 +16,12 @@ import (
 // repeated in all facets. ggplot2 apparently does this when the
 // faceting variable isn't in one of the data frames.
 
-// TODO: If I apply X faceting and then Y faceting, I have to figure
-// out that the Y labeling should only apply at the edge and not in
-// each column. The same problem applies to sharing scales marks.
-//
-// I'll see this in the group values, but there I have to be careful
-// about faceting that has already happened on the *same* dimension,
-// which could result in multiple facets for the same value.
-
 // TODO: FacetWrap
+
+// TODO: Subplot is getting rather complicated. If I want to make
+// facets only use public APIs, perhaps gg itself should only know
+// about some interface for table group labels that provides a layout
+// manager and the layout logic should live with the facets.
 
 // FacetCommon is the base type for plot faceting operations. Faceting
 // is a grouping operation that subdivides a plot into subplots based
@@ -78,6 +75,10 @@ func (f *FacetCommon) apply(p *Plot, dir string) {
 
 	// TODO: What should this do if there are multiple faceting
 	// operations and the results aren't a complete cross-product?
+	// Using GroupBy to form the initial faceting groups will
+	// leave out subplots with no data. Alternatively, I could
+	// base this on the total set of values and force there to be
+	// a complete cross-product.
 
 	// TODO: If this is, say, and X faceting and different
 	// existing columns have different sets of values, should I
@@ -85,11 +86,6 @@ func (f *FacetCommon) apply(p *Plot, dir string) {
 	// would require grouping existing subplots in potentially
 	// complex ways (for example, if I do a FacetWrap and then a
 	// FacetX, grouping subplots by column alone will be wrong.)
-	//
-	// I'm going to need to do this grouping anyway to put labels
-	// in the right places. Alternatively, I could put labels on
-	// every subplot and let final layout eliminate redundant
-	// labels that aren't interrupted by a higher-level label.
 
 	// Collect grouped values. If there was already grouping
 	// structure, it's possible we'll have multiple groups with
@@ -122,29 +118,47 @@ func (f *FacetCommon) apply(p *Plot, dir string) {
 		}
 	}
 
-	// Find existing subplots, split existing subplots into
-	// len(vals) new subplots, and transform each GroupBy group
-	// into its new subplot.
+	// Find existing subplots, split existing subplots and bands
+	// into len(vals) new subplots and bands, and transform each
+	// GroupBy group into its new subplot.
 	subplots := make(map[*subplot][]*subplot)
+	bands := make(map[*subplotBand][]*subplotBand)
 	ndata := table.Grouping(new(table.Table))
 	for _, gid := range grouped.Tables() {
 		// Find subplot by walking up group hierarchy.
 		sub := subplotOf(gid)
+
+		// Split old band into len(vals) new bands in the
+		// orthogonal axis.
+		var band *subplotBand
+		if dir == "x" {
+			band = sub.vBand
+		} else {
+			band = sub.hBand
+		}
+		nbands := bands[band]
+		if nbands == nil {
+			nbands = make([]*subplotBand, len(vals))
+			for _, val := range vals {
+				nb := &subplotBand{parent: band, label: val.label}
+				nbands[val.index] = nb
+			}
+			bands[band] = nbands
+		}
 
 		// Split old subplot into len(vals) new subplots.
 		nsubplots := subplots[sub]
 		if nsubplots == nil {
 			nsubplots = make([]*subplot, len(vals))
 			for _, val := range vals {
-				ns := &subplot{parent: sub}
+				ns := &subplot{parent: sub, x: sub.x, y: sub.y,
+					vBand: sub.vBand, hBand: sub.hBand}
 				if dir == "x" {
-					ns.col = val.index
-					ns.labelTop = val.label
-					ns.showLabelTop = true
+					ns.x = sub.x*len(vals) + val.index
+					ns.vBand = nbands[val.index]
 				} else {
-					ns.row = val.index
-					ns.labelRight = val.label
-					ns.showLabelRight = true
+					ns.y = sub.y*len(vals) + val.index
+					ns.hBand = nbands[val.index]
 				}
 				nsubplots[val.index] = ns
 			}
@@ -165,19 +179,22 @@ func (f *FacetCommon) apply(p *Plot, dir string) {
 	}
 }
 
+// subplotBand represents a rectangular group of subplots in either a
+// vertical group (with a label on top) or a horizontal group (with a
+// label to the right).
+type subplotBand struct {
+	parent *subplotBand
+	label  string
+}
+
 type subplot struct {
 	parent *subplot
 
-	// row and col are the row and column of this subplot in its
-	// parent, where 0, 0 is the top left.
-	row, col int
+	// x and y are the position of this subplot, where 0, 0 is the
+	// top left.
+	x, y int
 
-	// TODO: Flags for which scale marks to show. Alternatively,
-	// if layout eliminates redundant labels, it should probably
-	// also figure out which scale marks to show.
-
-	labelTop, labelRight         string
-	showLabelTop, showLabelRight bool
+	vBand, hBand *subplotBand
 }
 
 var rootSubplot = &subplot{}
@@ -193,5 +210,5 @@ func subplotOf(gid table.GroupID) *subplot {
 }
 
 func (s subplot) String() string {
-	return fmt.Sprintf("[%d %d]", s.col, s.row)
+	return fmt.Sprintf("[%d %d]", s.x, s.y)
 }

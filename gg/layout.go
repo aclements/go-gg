@@ -26,8 +26,18 @@ const (
 
 // A plotElt is a high-level element of a plot layout. It is either a
 // subplot body, or a facet label.
+//
+// plotElts are arranged in a 2D grid. Coordinates in the grid are
+// specified by a pair of "paths" rather than a simple pair of
+// indexes. For example, element A is to the left of element B if A's
+// X path is less than B's X path, where paths are compared in tuple
+// order. This makes it easy to, for example, place an element to the
+// right of another element without having to renumber all of the
+// elements that are already to its right.
 type plotElt struct {
-	typ eltType
+	typ            eltType
+	xPath, yPath   eltPath // Top left coordinate.
+	x2Path, y2Path eltPath // Bottom right. If nil, same as xPath, yPath.
 
 	// For subplot elements.
 	subplot *subplot
@@ -36,55 +46,95 @@ type plotElt struct {
 	// For label elements.
 	label string
 
-	rowPath, colPath eltPath
-
-	// row and col are the global row and column of this element.
-	row, col int
+	// x, y, xSpan, and ySpan are the global position and span of
+	// this element. These are computed by layoutPlotElts.
+	x, y         int
+	xSpan, ySpan int
 
 	layout *layout.Leaf
 }
 
-func newPlotElt(s *subplot) (body *plotElt, labels []*plotElt) {
-	var walk func(*subplot) (rp, cp eltPath)
-	walk = func(s *subplot) (rp, cp eltPath) {
-		if s == nil {
-			return eltPath{}, eltPath{}
-		}
-		rp, cp = walk(s.parent)
-		return append(rp, s.row), append(cp, s.col)
+func newPlotElt(s *subplot) *plotElt {
+	return &plotElt{
+		typ:     eltSubplot,
+		subplot: s,
+		xPath:   eltPath{s.x, 0},
+		yPath:   eltPath{s.y, 0},
+		layout:  new(layout.Leaf).SetFlex(true, true),
 	}
-	rp, cp := walk(s)
-	rp, cp = append(rp, 0), append(cp, 0)
+}
 
-	// Create label elements.
-	rightIdx, topIdx := 1, -1
-	for s := s; s != nil; s = s.parent {
-		if s.showLabelTop {
-			l := &plotElt{
-				typ:     eltHLabel,
-				label:   s.labelTop,
-				rowPath: append(rp[:len(rp)-1:len(rp)-1], topIdx),
-				colPath: cp,
-			}
-			labels = append(labels, l)
-			topIdx--
+func addSubplotLabels(elts []*plotElt) []*plotElt {
+	// Find the regions covered by each subplot band.
+	type region struct{ x1, x2, y1, y2, level int }
+	update := func(r *region, s *subplot) {
+		if s.x < r.x1 {
+			r.x1 = s.x
+		} else if s.x > r.x2 {
+			r.x2 = s.x
 		}
-		if s.showLabelRight {
-			l := &plotElt{
-				typ:     eltVLabel,
-				label:   s.labelRight,
-				rowPath: rp,
-				colPath: append(cp[:len(cp)-1:len(cp)-1], rightIdx),
-			}
-			labels = append(labels, l)
-			rightIdx++
+		if s.y < r.y1 {
+			r.y1 = s.y
+		} else if s.y > r.y2 {
+			r.y2 = s.y
 		}
 	}
 
-	// Create subplot body element.
-	body = &plotElt{typ: eltSubplot, subplot: s, rowPath: rp, colPath: cp}
+	vBands := make(map[*subplotBand]region)
+	hBands := make(map[*subplotBand]region)
+	for _, elt := range elts {
+		if elt.typ != eltSubplot {
+			continue
+		}
+		s := elt.subplot
 
-	return
+		level := 1
+		for vBand := s.vBand; vBand != nil; vBand = vBand.parent {
+			r, ok := vBands[vBand]
+			if !ok {
+				r = region{s.x, s.x, s.y, s.y, level}
+			} else {
+				update(&r, s)
+			}
+			vBands[vBand] = r
+			level++
+		}
+
+		level = 1
+		for hBand := s.hBand; hBand != nil; hBand = hBand.parent {
+			r, ok := hBands[hBand]
+			if !ok {
+				r = region{s.x, s.x, s.y, s.y, level}
+			} else {
+				update(&r, s)
+			}
+			hBands[hBand] = r
+			level++
+		}
+	}
+
+	// Create labels.
+	for vBand, r := range vBands {
+		elts = append(elts, &plotElt{
+			typ:    eltHLabel,
+			label:  vBand.label,
+			xPath:  eltPath{r.x1, 0},
+			yPath:  eltPath{r.y1, -r.level},
+			x2Path: eltPath{r.x2, 0},
+			layout: new(layout.Leaf).SetMin(0, textLeading).SetFlex(true, false),
+		})
+	}
+	for hBand, r := range hBands {
+		elts = append(elts, &plotElt{
+			typ:    eltVLabel,
+			label:  hBand.label,
+			xPath:  eltPath{r.x2, r.level},
+			yPath:  eltPath{r.y1, 0},
+			y2Path: eltPath{r.y2, 0},
+			layout: new(layout.Leaf).SetMin(textLeading, 0).SetFlex(false, true),
+		})
+	}
+	return elts
 }
 
 type eltPath []int
@@ -107,82 +157,78 @@ func (a eltPath) cmp(b eltPath) int {
 	return 0
 }
 
-func layoutPlotElts(elts []*plotElt) layout.Element {
-	// Construct the global element grid from the grid hierarchy.
-	// Do this by sorting the "row path" and "column path" to each
-	// leaf and computing global row/col of each leaf from these
-	// orders.
-	//
-	// TODO: This isn't very robust to weird faceting. Maybe
-	// faceting should be responsible for maintaining a top-level
-	// grid. Presumably this would work by requiring global
-	// row/col in the subplot nodes and considering only the leaf
-	// subplot nodes. Perhaps all of the nodes created by a single
-	// faceting operation would have a unique tag so I could
-	// identify if the leafs were inconsistent. That tag could
-	// contain information global to that faceting operation, such
-	// as the total number of rows and columns. Each node could
-	// belong to a row group and a column group, where these
-	// groups are what specify the label for that row/columns and
-	// point to the parent row/column group for the next label.
-	sort.Sort(plotEltSorter{elts, false})
-	col, lastPath := -1, eltPath(nil)
-	for _, elt := range elts {
-		if lastPath.cmp(elt.colPath) != 0 {
-			lastPath = elt.colPath
-			col++
-		}
-		elt.col = col
-	}
-	sort.Sort(plotEltSorter{elts, true})
-	row, lastPath := -1, eltPath(nil)
-	for _, elt := range elts {
-		if lastPath.cmp(elt.rowPath) != 0 {
-			lastPath = elt.rowPath
-			row++
-		}
-		elt.row = row
-	}
+type eltPaths []eltPath
 
-	// TODO: Merge and eliminate labels. This may be tricky if
-	// there's a facet hierarchy on one axis because it's the
-	// hierarchy that will be repeated, not just the individual
-	// labels.
+func (s eltPaths) Len() int {
+	return len(s)
+}
+
+func (s eltPaths) Less(i, j int) bool {
+	return s[i].cmp(s[j]) < 0
+}
+
+func (s eltPaths) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
+}
+
+func (s eltPaths) nub() eltPaths {
+	var i, o int
+	for i, o = 1, 1; i < len(s); i++ {
+		if s[i].cmp(s[i-1]) != 0 {
+			s[o] = s[i]
+			o++
+		}
+	}
+	return s[:o]
+}
+
+func (s eltPaths) find(p eltPath) int {
+	return sort.Search(len(s), func(i int) bool {
+		return s[i].cmp(p) >= 0
+	})
+}
+
+// layoutPlotElts returns a layout containing all of the elements in
+// elts.
+//
+// layoutPlotElts flattens the X and Y paths of elts into simple
+// coordinate indexes and constructs a layout.Grid.
+func layoutPlotElts(elts []*plotElt) layout.Element {
+	// Construct the global element grid from coordinate paths by
+	// sorting the sets of X paths and Y paths to each leaf and
+	// computing a global (x,y) for each leaf from these orders.
+	dir := func(get func(*plotElt) (p, p2 eltPath, pos, span *int)) {
+		var paths eltPaths
+		for _, elt := range elts {
+			p, p2, _, _ := get(elt)
+			paths = append(paths, p)
+			if p2 != nil {
+				paths = append(paths, p2)
+			}
+		}
+		sort.Sort(paths)
+		paths = paths.nub()
+		for _, elt := range elts {
+			p, p2, pos, span := get(elt)
+			*pos = paths.find(p)
+			if p2 == nil {
+				*span = 1
+			} else {
+				*span = paths.find(p2) - *pos + 1
+			}
+		}
+	}
+	dir(func(e *plotElt) (p, p2 eltPath, pos, span *int) {
+		return e.xPath, e.x2Path, &e.x, &e.xSpan
+	})
+	dir(func(e *plotElt) (p, p2 eltPath, pos, span *int) {
+		return e.yPath, e.y2Path, &e.y, &e.ySpan
+	})
 
 	// Construct the grid layout.
 	l := new(layout.Grid)
 	for _, si := range elts {
-		si.layout = new(layout.Leaf)
-		switch si.typ {
-		case eltSubplot:
-			si.layout.SetFlex(true, true)
-		case eltHLabel:
-			si.layout.SetMin(0, textLeading).SetFlex(true, false)
-		case eltVLabel:
-			si.layout.SetMin(textLeading, 0).SetFlex(false, true)
-		}
-		l.Add(si.layout, si.col, si.row, 1, 1)
+		l.Add(si.layout, si.x, si.y, si.xSpan, si.ySpan)
 	}
 	return l
-}
-
-// plotEltSorter sorts plot elements by row or column path.
-type plotEltSorter struct {
-	si    []*plotElt
-	byRow bool
-}
-
-func (s plotEltSorter) Len() int {
-	return len(s.si)
-}
-
-func (s plotEltSorter) Less(i, j int) bool {
-	if s.byRow {
-		return s.si[i].rowPath.cmp(s.si[j].rowPath) < 0
-	}
-	return s.si[i].colPath.cmp(s.si[j].colPath) < 0
-}
-
-func (s plotEltSorter) Swap(i, j int) {
-	s.si[i], s.si[j] = s.si[j], s.si[i]
 }

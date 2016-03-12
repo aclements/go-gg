@@ -47,17 +47,16 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 			subplot := subplotOf(gid)
 			elt := subplots[subplot]
 			if elt == nil {
-				body, labels := newPlotElt(subplot)
-				plotElts = append(plotElts, body)
-				plotElts = append(plotElts, labels...)
-				subplots[subplot] = body
-				elt = body
+				elt = newPlotElt(subplot)
+				plotElts = append(plotElts, elt)
+				subplots[subplot] = elt
 			}
 			elt.marks = append(elt.marks, mark)
 		}
 	}
 
 	// Compute plot element layout.
+	plotElts = addSubplotLabels(plotElts)
 	layoutPlotElts(plotElts).SetLayout(0, 0, float64(width), float64(height))
 
 	// Draw.
