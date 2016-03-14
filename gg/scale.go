@@ -99,6 +99,8 @@ type Scaler interface {
 	// implement the cardinal -> discrete by value order rule.
 	// This would probably also make Map much faster.
 	Map(x interface{}) interface{}
+
+	CloneScaler() Scaler
 }
 
 var float64Type = reflect.TypeOf(float64(0))
@@ -164,6 +166,55 @@ func sliceToFloat64(s table.Slice) []float64 {
 	return out
 }
 
+type defaultScale struct {
+	scale Scaler
+}
+
+func (s *defaultScale) String() string {
+	return fmt.Sprintf("default (%s)", s.scale)
+}
+
+func (s *defaultScale) ExpandDomain(v table.Slice) {
+	if s.scale == nil {
+		var err error
+		s.scale, err = DefaultScale(v)
+		if err != nil {
+			panic(&generic.TypeError{reflect.TypeOf(v), nil, err.Error()})
+		}
+	}
+	s.scale.ExpandDomain(v)
+}
+
+func (s *defaultScale) ensure() Scaler {
+	if s.scale == nil {
+		s.scale = NewLinearScaler()
+	}
+	return s.scale
+}
+
+func (s *defaultScale) Ranger(r Ranger) Ranger {
+	return s.ensure().Ranger(r)
+}
+
+func (s *defaultScale) DiscreteRange(r interface{}) interface{} {
+	return s.ensure().DiscreteRange(r)
+}
+
+func (s *defaultScale) RangeType() reflect.Type {
+	return s.ensure().RangeType()
+}
+
+func (s *defaultScale) Map(x interface{}) interface{} {
+	return s.ensure().Map(x)
+}
+
+func (s *defaultScale) CloneScaler() Scaler {
+	if s.scale == nil {
+		return &defaultScale{}
+	}
+	return &defaultScale{s.scale.CloneScaler()}
+}
+
 func DefaultScale(seq table.Slice) (Scaler, error) {
 	// Handle common case types.
 	switch seq.(type) {
@@ -221,6 +272,11 @@ func (s *identityScale) Ranger(r Ranger) Ranger                  { return nil }
 func (s *identityScale) DiscreteRange(r interface{}) interface{} { return nil }
 func (s *identityScale) Map(x interface{}) interface{}           { return x }
 
+func (s *identityScale) CloneScaler() Scaler {
+	s2 := *s
+	return &s2
+}
+
 // NewLinearScaler returns a continuous linear scale. The domain must
 // be a VarCardinal.
 //
@@ -234,6 +290,10 @@ func NewLinearScaler() Scaler {
 type linearScale struct {
 	s scale.Linear
 	r Ranger
+}
+
+func (s *linearScale) String() string {
+	return fmt.Sprintf("linear [%g,%g] => %s", s.s.Min, s.s.Max, s.r)
 }
 
 func (s *linearScale) ExpandDomain(v table.Slice) {
@@ -280,6 +340,11 @@ func (s *linearScale) Map(x interface{}) interface{} {
 	return s.r.Map(ls.Map(v))
 }
 
+func (s *linearScale) CloneScaler() Scaler {
+	s2 := *s
+	return &s2
+}
+
 type Ranger interface {
 	Map(x float64) (y interface{})
 	Unmap(y interface{}) (x float64)
@@ -292,6 +357,10 @@ func NewFloatRanger(lo, hi float64) Ranger {
 
 type floatRanger struct {
 	lo, w float64
+}
+
+func (r *floatRanger) String() string {
+	return fmt.Sprintf("[%g,%g]", r.lo, r.lo+r.w)
 }
 
 func (r *floatRanger) Map(x float64) interface{} {

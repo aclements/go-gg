@@ -8,10 +8,8 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"reflect"
 	"strconv"
 
-	"github.com/aclements/go-gg/generic"
 	"github.com/aclements/go-gg/table"
 )
 
@@ -66,12 +64,32 @@ type scalerTree struct {
 	scales map[table.GroupID]Scaler
 }
 
-func newScalerTree(s Scaler) scalerTree {
-	// TODO: If I already have a faceting, perhaps this needs to
-	// re-apply the faceting to s to split up this scale.
+func newScalerTree() scalerTree {
 	return scalerTree{map[table.GroupID]Scaler{
-		table.RootGroupID: s,
+		table.RootGroupID: &defaultScale{},
 	}}
+}
+
+func (t scalerTree) bind(gid table.GroupID, s Scaler) {
+	// Unbind scales under gid.
+	for ogid := range t.scales {
+		if gid == table.RootGroupID {
+			// Optimize binding the root GID.
+			delete(t.scales, ogid)
+			continue
+		}
+
+		for p := ogid; ; p = p.Parent() {
+			if p == gid {
+				delete(t.scales, ogid)
+				break
+			}
+			if p == table.RootGroupID {
+				break
+			}
+		}
+	}
+	t.scales[gid] = s
 }
 
 func (t scalerTree) find(gid table.GroupID) Scaler {
@@ -80,35 +98,43 @@ func (t scalerTree) find(gid table.GroupID) Scaler {
 			return s
 		}
 		if gid == table.RootGroupID {
-			// TODO: This could happen if an operation
-			// that creates non-root scales (faceting) and
-			// then flattened the data or set new data.
-			// Maybe setting new data needs to check that
-			// all scales still apply?
+			// This should never happen.
 			panic("no scale for group " + gid.String())
 		}
 		gid = gid.Parent()
 	}
 }
 
-// Scale binds a scale to the given visual aesthetic.
+func (p *Plot) getScales(aes string) scalerTree {
+	st, ok := p.scales[aes]
+	if !ok {
+		st = newScalerTree()
+		p.scales[aes] = st
+	}
+	return st
+}
+
+// SetScale binds a scale to the given visual aesthetic. SetScale is
+// shorthand for SetScaleAt(aes, s, table.RootGroupID).
 //
-// Scale returns p for ease of chaining.
-func (p *Plot) Scale(aes string, s Scaler) *Plot {
+// SetScale returns p for ease of chaining.
+func (p *Plot) SetScale(aes string, s Scaler) *Plot {
+	return p.SetScaleAt(aes, s, table.RootGroupID)
+}
+
+// SetScaleAt binds a scale to the given visual aesthetic for all data
+// in group gid or descendants of gid.
+func (p *Plot) SetScaleAt(aes string, s Scaler, gid table.GroupID) *Plot {
 	// TODO: Should aes be an enum so you can't mix up aesthetics
 	// and column names?
-
-	// Bind this scale.
-	p.scales[aes] = newScalerTree(s)
-
-	// Add s to aes's scale set.
-	ss := p.scaleSet[aes]
-	if ss == nil {
-		ss = make(map[Scaler]bool)
-		p.scaleSet[aes] = ss
-	}
-	ss[s] = true
+	p.getScales(aes).bind(gid, s)
 	return p
+}
+
+// GetScale returns the scale for the given visual aesthetic used for
+// data in group gid.
+func (p *Plot) GetScale(aes string, gid table.GroupID) Scaler {
+	return p.getScales(aes).find(gid)
 }
 
 type scaledDataKey struct {
@@ -116,9 +142,9 @@ type scaledDataKey struct {
 	col  string
 }
 
-// use binds a column of data to an aesthetic. It creates the
-// aesthetic's scale if necessary, expands its domain to include the
-// data in col, and returns the scaled data.
+// use binds a column of data to an aesthetic. It expands the domain
+// of the aesthetic's scale to include the data in col, and returns
+// the scaled data.
 //
 // col may be "", in which case it simply returns nil.
 //
@@ -148,7 +174,7 @@ func (p *Plot) use(aes string, col string) *scaledData {
 		}
 
 		// Get the scale tree.
-		scales := p.scales[aes]
+		st := p.getScales(aes)
 
 		for _, gid := range p.Data().Tables() {
 			table := p.Data().Table(gid)
@@ -156,18 +182,16 @@ func (p *Plot) use(aes string, col string) *scaledData {
 			// Get the data.
 			seq := table.MustColumn(col)
 
-			// Find or create the scale.
-			var scaler Scaler
-			if scales.scales == nil {
-				var err error
-				scaler, err = DefaultScale(seq)
-				if err != nil {
-					panic(&generic.TypeError{reflect.TypeOf(seq), nil, err.Error()})
-				}
-				p.Scale(aes, scaler)
-				scales = p.scales[aes]
+			// Find the scale.
+			scaler := st.find(gid)
+
+			// Add the scale to aes's scale set.
+			ss := p.scaleSet[aes]
+			if ss == nil {
+				ss = make(map[Scaler]bool)
+				p.scaleSet[aes] = ss
 			}
-			scaler = scales.find(gid)
+			ss[scaler] = true
 
 			// Train the scale.
 			scaler.ExpandDomain(seq)

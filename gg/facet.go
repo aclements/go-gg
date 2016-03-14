@@ -35,12 +35,27 @@ type FacetCommon struct {
 	// they will be in index order.
 	Col string
 
-	// SplitXScales indicates whether plots created by this
-	// faceting operation should have separate X axis scales. The
-	// default, false, indicates that all of the plots created by
-	// splitting up an existing plot should share the X axis of
-	// the original plot. If true, each plot will have a separate
-	// X axis scale.
+	// SplitXScales indicates that each band (column for FacetX;
+	// row for FacetY) created by this faceting operation should
+	// have separate X axis scales. The default, false, indicates
+	// that subplots should continue to share X scales.
+	//
+	// SplitXScales and SplitYScales, combined with facet
+	// composition, give a great deal of control over how scales
+	// are shared. Suppose you want to create an X/Y facet grid by
+	// first performing a FacetX and then a FacetY. Here are some
+	// common ways to share or split the scales:
+	//
+	// * To share the same scales between all subplots, set both
+	// flags to false in both facet operations.
+	//
+	// * To have independent scales in all subplots, set both
+	// flags to true in the FacetY (and it doesn't matter what
+	// they are in the FacetX).
+	//
+	// * To share the X scale within each column and the Y scale
+	// within each row, set SplitXScales in the FacetX and
+	// SplitYScales in the FacetY.
 	SplitXScales bool
 
 	// SplitYScales is the equivalent of SplitXScales for Y axis
@@ -121,8 +136,13 @@ func (f *FacetCommon) apply(p *Plot, dir string) {
 	// Find existing subplots, split existing subplots and bands
 	// into len(vals) new subplots and bands, and transform each
 	// GroupBy group into its new subplot.
+	type bandScale struct {
+		band  *subplotBand
+		scale Scaler
+	}
 	subplots := make(map[*subplot][]*subplot)
 	bands := make(map[*subplotBand][]*subplotBand)
+	scales := make(map[bandScale]Scaler)
 	ndata := table.Grouping(new(table.Table))
 	for _, gid := range grouped.Tables() {
 		// Find subplot by walking up group hierarchy.
@@ -169,14 +189,39 @@ func (f *FacetCommon) apply(p *Plot, dir string) {
 		nsubplot := nsubplots[vals[gid.Label()].index]
 		ngid := gid.Parent().Extend(nsubplot)
 		ndata = ndata.AddTable(ngid, grouped.Table(gid))
+
+		// Split scales if requested. At a high level, we want
+		// to give each band a new scale, but there may
+		// already be multiple scales within a band, so we
+		// find the set of scales within a band and split each
+		// distinct scale up.
+		var nband *subplotBand
+		if dir == "x" {
+			nband = nsubplot.vBand
+		} else {
+			nband = nsubplot.hBand
+		}
+		if f.SplitXScales {
+			scaler := p.GetScale("x", gid)
+			nscaler := scales[bandScale{nband, scaler}]
+			if nscaler == nil {
+				nscaler = scaler.CloneScaler()
+				scales[bandScale{nband, scaler}] = nscaler
+			}
+			p.SetScaleAt("x", nscaler, ngid)
+		}
+		if f.SplitYScales {
+			scaler := p.GetScale("y", gid)
+			nscaler := scales[bandScale{nband, scaler}]
+			if nscaler == nil {
+				nscaler = scaler.CloneScaler()
+				scales[bandScale{nband, scaler}] = nscaler
+			}
+			p.SetScaleAt("y", nscaler, ngid)
+		}
 	}
 
 	p.SetData(ndata)
-
-	if f.SplitXScales || f.SplitYScales {
-		// TODO
-		Warning.Print("not implemented: splitting scales")
-	}
 }
 
 // subplotBand represents a rectangular group of subplots in either a
