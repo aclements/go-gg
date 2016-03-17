@@ -104,13 +104,11 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 			//
 			// TODO: Clip to label region.
 			svg.Rect(int(x), int(y), int(w), int(h), "fill: #ccc")
-			style := `text-anchor="middle"`
-			if elt.typ == eltHLabel {
-				// Vertical centering is very poorly
-				// supported. dy is the best chance.
-				style += ` dy=".3em"`
-			} else if elt.typ == eltVLabel {
-				style += ` writing-mode="tb"`
+			// Vertical centering is very poorly
+			// supported. dy is the best chance.
+			style := `text-anchor="middle" dy=".3em"`
+			if elt.typ == eltVLabel {
+				style += fmt.Sprintf(` transform="rotate(90 %d %d)"`, int(x+w/2), int(y+h/2))
 			}
 			svg.Text(int(x+w/2), int(y+h/2), elt.label, style)
 			continue
