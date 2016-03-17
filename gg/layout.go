@@ -34,6 +34,19 @@ const (
 // order. This makes it easy to, for example, place an element to the
 // right of another element without having to renumber all of the
 // elements that are already to its right.
+//
+// The first level of the hierarchy is simply the coordinate of the
+// plot in the grid. Within this, we layout plot elements as follows:
+//
+//    +----------------------+
+//    | label (x/0, y/-2)    |
+//    +----------------------+
+//    | label (x/0, y/-1)    |
+//    +----------------------+------------+
+//    |                      | label      |
+//    | body (x/0, y/0)      | (x/1, y/0) |
+//    |                      |            |
+//    +----------------------+------------+
 type plotElt struct {
 	typ            eltType
 	xPath, yPath   eltPath // Top left coordinate.
