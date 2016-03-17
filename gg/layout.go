@@ -10,12 +10,6 @@ import (
 	"github.com/aclements/go-gg/gg/layout"
 )
 
-// textLeading is the height of a line of text.
-//
-// TODO: Make this real. Chrome's default font-size is 16px, so 20px
-// is a fairly comfortable leading.
-const textLeading = 20
-
 type eltType int
 
 const (
@@ -138,6 +132,7 @@ func addSubplotLabels(elts []*plotElt) []*plotElt {
 	}
 
 	// Create labels.
+	textLeading := measureString(fontSize, "").leading
 	for vBand, r := range vBands {
 		elts = append(elts, &plotElt{
 			typ:    eltHLabel,

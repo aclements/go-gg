@@ -15,6 +15,11 @@ import (
 	"github.com/ajstarks/svgo"
 )
 
+// fontSize is the font size in pixels.
+//
+// TODO: Theme.
+const fontSize float64 = 12
+
 func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 	// TODO: Scales marks, axis labels, legend.
 
@@ -87,7 +92,7 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 
 	// Draw.
 	svg := svg.New(w)
-	svg.Start(width, height)
+	svg.Start(width, height, fmt.Sprintf(`font-size="%.6gpx"`, fontSize))
 	defer svg.End()
 
 	// Render each plot element.
