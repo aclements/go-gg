@@ -5,8 +5,11 @@
 package gg
 
 import (
+	"fmt"
 	"io"
+	"math"
 	"reflect"
+	"strings"
 
 	"github.com/aclements/go-gg/table"
 	"github.com/ajstarks/svgo"
@@ -33,6 +36,12 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 	// TODO: Let the user alternatively specify the width and
 	// height of the subplots, rather than the whole plot.
 
+	// TODO: Add margin to plots. This is somewhat tricky because
+	// we still want to show ticks in those margins; if we just
+	// narrow the ranger, we need a way to ask for the full range
+	// of ticks. What we really want is to expand the domain
+	// slightly, but what does that mean for discrete scales?
+
 	// Create rendering environment.
 	env := &renderEnv{cache: make(map[renderCacheKey]table.Slice)}
 
@@ -43,6 +52,9 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 	subplots := make(map[*subplot]*plotElt)
 	plotElts := []*plotElt{}
 	for _, mark := range p.marks {
+		// TODO: This is wrong. If there are non-subplot
+		// groups, it'll add the same mark multiple times to
+		// the plotElt.
 		for _, gid := range mark.groups {
 			subplot := subplotOf(gid)
 			elt := subplots[subplot]
@@ -53,6 +65,20 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 			}
 			elt.marks = append(elt.marks, mark)
 		}
+	}
+	// Subdivide the scales.
+	for sk := range p.scaleSet {
+		subplot := subplotOf(sk.gid)
+		elt := subplots[subplot]
+		if elt == nil {
+			continue
+		}
+		ss := elt.scales[sk.aes]
+		if ss == nil {
+			ss = make(map[Scaler]bool)
+			elt.scales[sk.aes] = ss
+		}
+		ss[sk.scale] = true
 	}
 
 	// Compute plot element layout.
@@ -86,13 +112,10 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 		}
 
 		// Set scale ranges.
-		//
-		// TODO: Do this only for the scales used by this
-		// subplot.
-		for s := range p.scaleSet["x"] {
+		for s := range elt.scales["x"] {
 			s.Ranger(NewFloatRanger(x, x+w))
 		}
-		for s := range p.scaleSet["y"] {
+		for s := range elt.scales["y"] {
 			s.Ranger(NewFloatRanger(y+h, y))
 		}
 
@@ -110,9 +133,53 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 				mark.m.mark(env, svg)
 			}
 		}
+
+		// Render scales.
+		for s := range elt.scales["x"] {
+			renderScale(svg, 'x', s, y+h)
+		}
+		for s := range elt.scales["y"] {
+			renderScale(svg, 'y', s, x)
+		}
 	}
 
 	return nil
+}
+
+func renderScale(svg *svg.SVG, dir rune, scale Scaler, pos float64) {
+	const length float64 = 4 // TODO: Theme
+
+	ranger := scale.Ranger(nil)
+	p0, p1 := ranger.Map(0).(float64), ranger.Map(1).(float64)
+	nTicks := int(math.Abs(p0-p1) / 50)
+	if nTicks < 1 {
+		nTicks = 1
+	}
+	major, _ := scale.Ticks(nTicks)
+
+	r := func(x float64) float64 {
+		// Round to nearest N.
+		return math.Floor(x + 0.5)
+	}
+	h := func(x float64) float64 {
+		// Round to nearest N+0.5.
+		return math.Floor(x) + 0.5
+	}
+	var path []string
+	if dir == 'x' {
+		path = append(path, fmt.Sprintf("M%.6g %.6gH%.6g", r(p0), h(pos), r(p1)))
+	} else {
+		path = append(path, fmt.Sprintf("M%.6g %.6gV%.6g", h(pos), r(p0), r(p1)))
+	}
+	for _, p := range major {
+		if dir == 'x' {
+			path = append(path, fmt.Sprintf("M%.6g %.6gv%.6g", h(p), r(pos), -length))
+		} else {
+			path = append(path, fmt.Sprintf("M%.6g %.6gh%.6g", r(pos), h(p), length))
+		}
+	}
+
+	svg.Path(strings.Join(path, ""), "stroke:#888") // TODO: Theme
 }
 
 type renderEnv struct {

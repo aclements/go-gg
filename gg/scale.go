@@ -100,6 +100,14 @@ type Scaler interface {
 	// This would probably also make Map much faster.
 	Map(x interface{}) interface{}
 
+	// XXX What should this return? moremath returns values in the
+	// input space, but that obviously doesn't work for discrete
+	// scales if I want the ticks between values. It could return
+	// values in the intermediate space or the output space.
+	// Currently it returns values in the output space or nil if
+	// ticks don't make sense.
+	Ticks(n int) (major, minor []float64)
+
 	CloneScaler() Scaler
 }
 
@@ -208,6 +216,10 @@ func (s *defaultScale) Map(x interface{}) interface{} {
 	return s.ensure().Map(x)
 }
 
+func (s *defaultScale) Ticks(n int) (major, minor []float64) {
+	return s.ensure().Ticks(n)
+}
+
 func (s *defaultScale) CloneScaler() Scaler {
 	if s.scale == nil {
 		return &defaultScale{}
@@ -271,6 +283,7 @@ func (s *identityScale) RangeType() reflect.Type {
 func (s *identityScale) Ranger(r Ranger) Ranger                  { return nil }
 func (s *identityScale) DiscreteRange(r interface{}) interface{} { return nil }
 func (s *identityScale) Map(x interface{}) interface{}           { return x }
+func (s *identityScale) Ticks(n int) (major, minor []float64)    { return nil, nil }
 
 func (s *identityScale) CloneScaler() Scaler {
 	s2 := *s
@@ -338,6 +351,22 @@ func (s *linearScale) Map(x interface{}) interface{} {
 	f64 := reflect.TypeOf(float64(0))
 	v := reflect.ValueOf(x).Convert(f64).Float()
 	return s.r.Map(ls.Map(v))
+}
+
+func (s *linearScale) Ticks(n int) (major, minor []float64) {
+	ls := s.s
+	if math.IsNaN(ls.Min) {
+		ls.Min, ls.Max = -1, 1
+	}
+	major, minor = ls.Ticks(n)
+	// Map input domain to output range.
+	for i := range major {
+		major[i] = s.r.Map(ls.Map(major[i])).(float64)
+	}
+	for i := range minor {
+		minor[i] = s.r.Map(ls.Map(minor[i])).(float64)
+	}
+	return
 }
 
 func (s *linearScale) CloneScaler() Scaler {

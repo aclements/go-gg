@@ -42,6 +42,7 @@ type plotElt struct {
 	// For subplot elements.
 	subplot *subplot
 	marks   []plotMark
+	scales  map[string]map[Scaler]bool
 
 	// For label elements.
 	label string
@@ -58,6 +59,7 @@ func newPlotElt(s *subplot) *plotElt {
 	return &plotElt{
 		typ:     eltSubplot,
 		subplot: s,
+		scales:  make(map[string]map[Scaler]bool),
 		xPath:   eltPath{s.x, 0},
 		yPath:   eltPath{s.y, 0},
 		layout:  new(layout.Leaf).SetFlex(true, true),

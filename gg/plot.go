@@ -27,7 +27,7 @@ type Plot struct {
 	scales map[string]scalerTree
 
 	scaledData map[scaledDataKey]*scaledData
-	scaleSet   map[string]map[Scaler]bool
+	scaleSet   map[scaleKey]bool
 	marks      []plotMark
 }
 
@@ -38,7 +38,7 @@ func NewPlot(data table.Grouping) *Plot {
 		},
 		scales:     make(map[string]scalerTree),
 		scaledData: make(map[scaledDataKey]*scaledData),
-		scaleSet:   make(map[string]map[Scaler]bool),
+		scaleSet:   make(map[scaleKey]bool),
 	}
 	return p
 }
@@ -46,6 +46,12 @@ func NewPlot(data table.Grouping) *Plot {
 type plotEnv struct {
 	parent *plotEnv
 	data   table.Grouping
+}
+
+type scaleKey struct {
+	gid   table.GroupID
+	aes   string
+	scale Scaler
 }
 
 // SetData sets p's current data table. The caller must not modify
@@ -185,13 +191,8 @@ func (p *Plot) use(aes string, col string) *scaledData {
 			// Find the scale.
 			scaler := st.find(gid)
 
-			// Add the scale to aes's scale set.
-			ss := p.scaleSet[aes]
-			if ss == nil {
-				ss = make(map[Scaler]bool)
-				p.scaleSet[aes] = ss
-			}
-			ss[scaler] = true
+			// Add the scale to the scale set.
+			p.scaleSet[scaleKey{gid, aes, scaler}] = true
 
 			// Train the scale.
 			scaler.ExpandDomain(seq)
