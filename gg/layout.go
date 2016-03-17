@@ -22,6 +22,7 @@ const (
 	eltSubplot eltType = 1 + iota
 	eltHLabel
 	eltVLabel
+	eltPadding
 )
 
 // A plotElt is a high-level element of a plot layout. It is either a
@@ -30,23 +31,28 @@ const (
 // plotElts are arranged in a 2D grid. Coordinates in the grid are
 // specified by a pair of "paths" rather than a simple pair of
 // indexes. For example, element A is to the left of element B if A's
-// X path is less than B's X path, where paths are compared in tuple
-// order. This makes it easy to, for example, place an element to the
-// right of another element without having to renumber all of the
-// elements that are already to its right.
+// X path is less than B's X path, where paths are compared as tuples
+// with an infinite number of trailing 0's. This makes it easy to, for
+// example, place an element to the right of another element without
+// having to renumber all of the elements that are already to its
+// right.
 //
 // The first level of the hierarchy is simply the coordinate of the
 // plot in the grid. Within this, we layout plot elements as follows:
 //
-//    +----------------------+
-//    | label (x/0, y/-2)    |
-//    +----------------------+
-//    | label (x/0, y/-1)    |
-//    +----------------------+------------+
-//    |                      | label      |
-//    | body (x/0, y/0)      | (x/1, y/0) |
-//    |                      |            |
-//    +----------------------+------------+
+//                +----------------------+
+//                | Padding (x, y/-2)    |
+//                +----------------------+
+//                | HLabel (x, y/-1/-1)  |
+//                +----------------------+
+//                | Hlabel (x, y/-1/0)   |
+//    +-----------+----------------------+------------+----------+
+//    | Padding   |                      | VLabel     | Padding  |
+//    | (x/-2, y) | Subplot (x, y)       | (x/1/0, y) | (x/2, y) |
+//    |           |                      |            |          |
+//    +-----------+----------------------+------------+----------+
+//                | Padding (x, y/2)     |
+//                +----------------------+
 type plotElt struct {
 	typ            eltType
 	xPath, yPath   eltPath // Top left coordinate.
@@ -73,8 +79,8 @@ func newPlotElt(s *subplot) *plotElt {
 		typ:     eltSubplot,
 		subplot: s,
 		scales:  make(map[string]map[Scaler]bool),
-		xPath:   eltPath{s.x, 0},
-		yPath:   eltPath{s.y, 0},
+		xPath:   eltPath{s.x},
+		yPath:   eltPath{s.y},
 		layout:  new(layout.Leaf).SetFlex(true, true),
 	}
 }
@@ -82,7 +88,7 @@ func newPlotElt(s *subplot) *plotElt {
 func addSubplotLabels(elts []*plotElt) []*plotElt {
 	// Find the regions covered by each subplot band.
 	type region struct{ x1, x2, y1, y2, level int }
-	update := func(r *region, s *subplot) {
+	update := func(r *region, s *subplot, level int) {
 		if s.x < r.x1 {
 			r.x1 = s.x
 		} else if s.x > r.x2 {
@@ -92,6 +98,9 @@ func addSubplotLabels(elts []*plotElt) []*plotElt {
 			r.y1 = s.y
 		} else if s.y > r.y2 {
 			r.y2 = s.y
+		}
+		if level > r.level {
+			r.level = level
 		}
 	}
 
@@ -103,25 +112,25 @@ func addSubplotLabels(elts []*plotElt) []*plotElt {
 		}
 		s := elt.subplot
 
-		level := 1
+		level := 0
 		for vBand := s.vBand; vBand != nil; vBand = vBand.parent {
 			r, ok := vBands[vBand]
 			if !ok {
 				r = region{s.x, s.x, s.y, s.y, level}
 			} else {
-				update(&r, s)
+				update(&r, s, level)
 			}
 			vBands[vBand] = r
 			level++
 		}
 
-		level = 1
+		level = 0
 		for hBand := s.hBand; hBand != nil; hBand = hBand.parent {
 			r, ok := hBands[hBand]
 			if !ok {
 				r = region{s.x, s.x, s.y, s.y, level}
 			} else {
-				update(&r, s)
+				update(&r, s, level)
 			}
 			hBands[hBand] = r
 			level++
@@ -133,9 +142,9 @@ func addSubplotLabels(elts []*plotElt) []*plotElt {
 		elts = append(elts, &plotElt{
 			typ:    eltHLabel,
 			label:  vBand.label,
-			xPath:  eltPath{r.x1, 0},
-			yPath:  eltPath{r.y1, -r.level},
-			x2Path: eltPath{r.x2, 0},
+			xPath:  eltPath{r.x1},
+			yPath:  eltPath{r.y1, -1, -r.level},
+			x2Path: eltPath{r.x2},
 			layout: new(layout.Leaf).SetMin(0, textLeading).SetFlex(true, false),
 		})
 	}
@@ -143,9 +152,9 @@ func addSubplotLabels(elts []*plotElt) []*plotElt {
 		elts = append(elts, &plotElt{
 			typ:    eltVLabel,
 			label:  hBand.label,
-			xPath:  eltPath{r.x2, r.level},
-			yPath:  eltPath{r.y1, 0},
-			y2Path: eltPath{r.y2, 0},
+			xPath:  eltPath{r.x2, 1, r.level},
+			yPath:  eltPath{r.y1},
+			y2Path: eltPath{r.y2},
 			layout: new(layout.Leaf).SetMin(textLeading, 0).SetFlex(false, true),
 		})
 	}
@@ -155,19 +164,21 @@ func addSubplotLabels(elts []*plotElt) []*plotElt {
 type eltPath []int
 
 func (a eltPath) cmp(b eltPath) int {
-	for k := 0; k < len(a) && k < len(b); k++ {
-		if a[k] != b[k] {
-			if a[k] < b[k] {
+	for len(a) > 0 || len(b) > 0 {
+		var ax, bx int
+		if len(a) > 0 {
+			ax, a = a[0], a[1:]
+		}
+		if len(b) > 0 {
+			bx, b = b[0], b[1:]
+		}
+		if ax != bx {
+			if ax < bx {
 				return -1
 			} else {
 				return 1
 			}
 		}
-	}
-	if len(a) < len(b) {
-		return -1
-	} else if len(a) > len(b) {
-		return 1
 	}
 	return 0
 }
@@ -209,6 +220,28 @@ func (s eltPaths) find(p eltPath) int {
 // layoutPlotElts flattens the X and Y paths of elts into simple
 // coordinate indexes and constructs a layout.Grid.
 func layoutPlotElts(elts []*plotElt) layout.Element {
+	const padding = 2 // TODO: Theme.
+
+	// Add padding elements to each subplot.
+	//
+	// TODO: Should there be padding between labels and the plot?
+	for _, elt := range elts {
+		if elt.typ != eltSubplot {
+			continue
+		}
+		x, y := elt.xPath[0], elt.yPath[0]
+		elts = append(elts,
+			// Top.
+			&plotElt{typ: eltPadding, xPath: eltPath{x}, yPath: eltPath{y, -2}, layout: new(layout.Leaf).SetMin(0, padding).SetFlex(true, false)},
+			// Right.
+			&plotElt{typ: eltPadding, xPath: eltPath{x, 2}, yPath: eltPath{y}, layout: new(layout.Leaf).SetMin(padding, 0).SetFlex(false, true)},
+			// Bottom.
+			&plotElt{typ: eltPadding, xPath: eltPath{x}, yPath: eltPath{y, 2}, layout: new(layout.Leaf).SetMin(0, padding).SetFlex(true, false)},
+			// Left.
+			&plotElt{typ: eltPadding, xPath: eltPath{x, -2}, yPath: eltPath{y}, layout: new(layout.Leaf).SetMin(padding, 0).SetFlex(false, true)},
+		)
+	}
+
 	// Construct the global element grid from coordinate paths by
 	// sorting the sets of X paths and Y paths to each leaf and
 	// computing a global (x,y) for each leaf from these orders.
