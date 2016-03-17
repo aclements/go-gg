@@ -104,7 +104,7 @@ func TestTable0(t *testing.T) {
 		t.Fatalf("tab is empty")
 	}
 	tab.Add("x", []int{1}) // Can override only column.
-	shouldPanic(t, "column y.* with 1 .* 0 rows", func() {
+	shouldPanic(t, "column \"y\".* with 1 .* 0 rows", func() {
 		tab.Add("y", []int{1})
 	})
 	tab.Add("y", []int{})
@@ -150,7 +150,7 @@ func TestTable1(t *testing.T) {
 		t.Fatalf("tab is empty")
 	}
 	tab.Add("x", []int{}) // Can override only column.
-	shouldPanic(t, "column y.* with 2 .* 1 rows", func() {
+	shouldPanic(t, "column \"y\".* with 2 .* 1 rows", func() {
 		tab.Add("y", []int{1, 2})
 	})
 	tab.Add("y", []int{1})
@@ -204,10 +204,10 @@ func TestAddTable(t *testing.T) {
 	if v := tab0.AddTable(RootGroupID, tabY); !equal(tabY, v) {
 		t.Fatalf("tab0.AddTable(RootGroupID, tabY) should be %v; got %v", tab0, v)
 	}
-	shouldPanic(t, "table missing column: x", func() {
+	shouldPanic(t, "table missing column \"x\"", func() {
 		tab0.AddTable(xgid, tabY)
 	})
-	shouldPanic(t, "table has extra column: y", func() {
+	shouldPanic(t, "table has extra column \"y\"", func() {
 		tab0.AddTable(xgid, tabXY)
 	})
 
@@ -251,7 +251,7 @@ func TestAddTable(t *testing.T) {
 		t.Fatalf("tables should be %v; got %v", want, tab2.Tables())
 	}
 
-	shouldPanic(t, `\[\]int and \[\]float64 for column x`, func() {
+	shouldPanic(t, `\[\]int and \[\]float64 for column "x"`, func() {
 		tab0.AddTable(xgid, new(Table).Add("x", []float64{}))
 	})
 }

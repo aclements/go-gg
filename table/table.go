@@ -22,8 +22,8 @@
 package table
 
 import (
+	"fmt"
 	"reflect"
-	"strconv"
 
 	"github.com/aclements/go-gg/generic"
 )
@@ -157,7 +157,7 @@ func (t *Table) Add(name string, data Slice) *Table {
 		nt.colNames = append(nt.colNames, name)
 		nt.len = dataLen
 	} else if nt.len != dataLen {
-		panic("cannot add column " + name + " with " + strconv.Itoa(dataLen) + " elements to table with " + strconv.Itoa(nt.len) + " rows")
+		panic(fmt.Sprintf("cannot add column %q with %d elements to table with %d rows", name, dataLen, nt.len))
 	} else {
 		nt.cols[name] = data
 		nt.colNames = append(nt.colNames, name)
@@ -188,7 +188,7 @@ func (t *Table) MustColumn(name string) Slice {
 	if c := t.Column(name); c != nil {
 		return c
 	}
-	panic("unknown column: " + name)
+	panic(fmt.Sprintf("unknown column %q", name))
 }
 
 // Tables returns the groups IDs in this Table. If t is empty, there
@@ -282,12 +282,12 @@ func (g *groupedTable) AddTable(gid GroupID, t *Table) Grouping {
 	tBase := ng.tables[ng.groups[0]]
 	for _, col := range ng.colNames {
 		if _, ok := t.cols[col]; !ok {
-			panic("table missing column: " + col)
+			panic(fmt.Sprintf("table missing column %q", col))
 		}
 		t0 := reflect.TypeOf(tBase.cols[col])
 		t1 := reflect.TypeOf(t.cols[col])
 		if t0 != t1 {
-			panic(&generic.TypeError{t0, t1, "for column " + col + " are not the same"})
+			panic(&generic.TypeError{t0, t1, fmt.Sprintf("for column %q are not the same", col)})
 		}
 	}
 	if len(t.cols) != len(ng.colNames) {
@@ -298,7 +298,7 @@ func (g *groupedTable) AddTable(gid GroupID, t *Table) Grouping {
 		}
 		for col := range t.cols {
 			if !colSet[col] {
-				panic("table has extra column: " + col)
+				panic(fmt.Sprintf("table has extra column %q", col))
 			}
 		}
 	}
