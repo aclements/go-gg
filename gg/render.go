@@ -47,6 +47,8 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 	// of ticks. What we really want is to expand the domain
 	// slightly, but what does that mean for discrete scales?
 
+	// TODO: Automatic aspect ratio by averaging slopes.
+
 	// Create rendering environment.
 	env := &renderEnv{cache: make(map[renderCacheKey]table.Slice)}
 
@@ -123,6 +125,8 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 		}
 
 		// Render marks.
+		//
+		// TODO: Clip to plot area.
 		for _, mark := range elt.marks {
 			for _, gid := range mark.groups {
 				if subplotOf(gid) != elt.subplot {
@@ -138,6 +142,10 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 		}
 
 		// Render scales.
+		//
+		// TODO: These tend not to match up nicely in the
+		// bottom left corner. Maybe I need to draw one path
+		// for the two lines and then add tick marks.
 		for s := range elt.scales["x"] {
 			renderScale(svg, 'x', s, y+h)
 		}

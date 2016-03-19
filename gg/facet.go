@@ -23,6 +23,10 @@ import (
 // about some interface for table group labels that provides a layout
 // manager and the layout logic should live with the facets.
 
+// TODO: This is very nearly flexible enough to make pairwise plots.
+
+// TODO: Is this flexible enough to make marginal distribution plots?
+
 // FacetCommon is the base type for plot faceting operations. Faceting
 // is a grouping operation that subdivides a plot into subplots based
 // on the values in data column. Faceting operations may be composed:

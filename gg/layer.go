@@ -10,6 +10,7 @@ type LayerLines LayerPaths
 
 func (l LayerLines) Apply(p *Plot) {
 	defer p.Save().Restore()
+	// TODO: This doesn't fill in the default correctly if X is "".
 	p = p.SortBy(l.X)
 	LayerPaths(l).Apply(p)
 }
