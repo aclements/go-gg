@@ -140,40 +140,6 @@ func isCardinal(k reflect.Kind) bool {
 	return canCardinal[k]
 }
 
-// sliceToFloat64 converts s to a []float64. s must have type []T
-// where T is integral or floating point. It panics with a
-// *generic.TypeError if s does not have the right type.
-//
-// TODO: Make this public? Perhaps in a type utilities package (with
-// isCardinal?) since it's for extending gg more than using it? Or put
-// it in generic (perhaps make DeepConvert actually work)?
-func sliceToFloat64(s table.Slice) []float64 {
-	// []float64
-	if ss, ok := s.([]float64); ok {
-		return ss
-	}
-
-	// Everything else needs a copy conversion.
-	rv := reflect.ValueOf(s)
-	if rv.Kind() != reflect.Slice || !isCardinal(rv.Type().Elem().Kind()) {
-		panic(&generic.TypeError{rv.Type(), nil, "is not []T where T is integral or floating point"})
-	}
-
-	out := make([]float64, rv.Len())
-	switch rv.Type().Elem().Kind() {
-	case reflect.Float32, reflect.Float64:
-		for i := range out {
-			out[i] = rv.Index(i).Float()
-		}
-
-	default:
-		for i := range out {
-			out[i] = rv.Index(i).Convert(float64Type).Float()
-		}
-	}
-	return out
-}
-
 type defaultScale struct {
 	scale Scaler
 }
@@ -310,7 +276,8 @@ func (s *linearScale) String() string {
 }
 
 func (s *linearScale) ExpandDomain(v table.Slice) {
-	data := sliceToFloat64(v)
+	var data []float64
+	generic.ConvertSlice(&data, v)
 	min, max := s.s.Min, s.s.Max
 	for _, v := range data {
 		if math.IsNaN(v) || math.IsInf(v, 0) {
