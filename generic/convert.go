@@ -32,9 +32,19 @@ func ConvertSlice(to interface{}, from Slice) {
 		panic(&TypeError{fv.Type(), tsv.Type(), "cannot be converted"})
 	}
 
-	tsv.SetLen(0)
-	for i, len := 0, fv.Len(); i < len; i++ {
-		tsv = reflect.Append(tsv, fv.Index(i).Convert(eltt))
+	switch to := to.(type) {
+	case *[]float64:
+		// This is extremely common.
+		*to = (*to)[:0]
+		for i, len := 0, fv.Len(); i < len; i++ {
+			*to = append(*to, fv.Index(i).Convert(eltt).Float())
+		}
+
+	default:
+		tsv.SetLen(0)
+		for i, len := 0, fv.Len(); i < len; i++ {
+			tsv = reflect.Append(tsv, fv.Index(i).Convert(eltt))
+		}
+		tv.Elem().Set(tsv)
 	}
-	tv.Elem().Set(tsv)
 }
