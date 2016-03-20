@@ -43,9 +43,20 @@ type Density struct {
 	// transform.
 	N int
 
-	// Trim controls the domain of the returned density estimate.
-	// It will be [min(X)-Trim*Bandwidth, max(X)+Trim*Bandwidth].
-	Trim float64
+	// Widen controls the domain of the returned density estimate.
+	// If Widen is < 0, the domain is the range of the data.
+	// Otherwise, the domain will be expanded by Widen*Bandwidth
+	// (which may be the computed bandwidth). If Widen is 0, it is
+	// replaced with a default value of 3.
+	Widen float64
+
+	// SplitGroups indicates that each group in the table should
+	// have separate bounds based on the data in that group alone.
+	// The default, false, indicates that the density function
+	// should use the bounds of all of the data combined. This
+	// makes it possible to stack KDEs and easier to compare KDEs
+	// across groups.
+	SplitGroups bool
 
 	// Cumulative indicates that Density should produce a
 	// cumulative density estimate rather than a probability
@@ -89,20 +100,54 @@ func (d Density) F(g table.Grouping) table.Grouping {
 	if d.N == 0 {
 		d.N = 200
 	}
+	if d.Widen == 0 {
+		d.Widen = 3
+	}
 	resp := "probability density"
 	if d.Cumulative {
 		resp = "cumulative density"
 	}
 
-	return table.MapTables(func(_ table.GroupID, t *table.Table) *table.Table {
+	// Gather samples.
+	samples := map[table.GroupID]stats.Sample{}
+	for _, gid := range g.Tables() {
+		t := g.Table(gid)
 		// TODO: Coerce to []float64?
-		kde.Sample = stats.Sample{Xs: t.MustColumn(d.X).([]float64)}
+		sample := stats.Sample{Xs: t.MustColumn(d.X).([]float64)}
 		if d.W != "" {
-			kde.Sample.Weights = t.MustColumn(d.W).([]float64)
+			sample.Weights = t.MustColumn(d.W).([]float64)
 		}
+		samples[gid] = sample
+	}
 
-		min, max := kde.Sample.Bounds()
-		if math.IsNaN(min) {
+	min, max := math.NaN(), math.NaN()
+	if !d.SplitGroups {
+		// Compute combined bounds.
+		for _, sample := range samples {
+			smin, smax := sample.Bounds()
+			if math.IsNaN(smin) {
+				continue
+			}
+
+			bandwidth := d.Bandwidth
+			if d.Bandwidth == 0 {
+				bandwidth = stats.BandwidthScott(sample)
+			}
+
+			smin, smax = smin-d.Widen*bandwidth, smax+d.Widen*bandwidth
+			if smin < min || math.IsNaN(min) {
+				min = smin
+			}
+			if smax > max || math.IsNaN(max) {
+				max = smax
+			}
+		}
+	}
+
+	return table.MapTables(func(gid table.GroupID, t *table.Table) *table.Table {
+		kde.Sample = samples[gid]
+
+		if kde.Sample.Weight() == 0 {
 			return new(table.Table).Add(d.X, []float64{}).Add(resp, []float64{})
 		}
 
@@ -110,7 +155,12 @@ func (d Density) F(g table.Grouping) table.Grouping {
 			kde.Bandwidth = stats.BandwidthScott(kde.Sample)
 		}
 
-		min, max = min-d.Trim*kde.Bandwidth, max+d.Trim*kde.Bandwidth
+		if d.SplitGroups {
+			// Compute group bounds.
+			min, max = kde.Sample.Bounds()
+			min, max = min-d.Widen*kde.Bandwidth, max+d.Widen*kde.Bandwidth
+		}
+
 		ss := vec.Linspace(min, max, d.N)
 		nt := new(table.Table).Add(d.X, ss)
 		if d.Cumulative {
