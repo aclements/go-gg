@@ -37,16 +37,16 @@ const (
 // plot in the grid. Within this, we layout plot elements as follows:
 //
 //                           +----------------------+
+//                           | HLabel (x, y/-3/-1)  |
+//                           +----------------------+
+//                           | Hlabel (x, y/-3/0)   |
+//                           +----------------------+
 //                           | Padding (x, y/-2)    |
-//                           +----------------------+
-//                           | HLabel (x, y/-1/-1)  |
-//                           +----------------------+
-//                           | Hlabel (x, y/-1/0)   |
-//    +-----------+----------+----------------------+------------+----------+
-//    | Padding   | YTicks   |                      | VLabel     | Padding  |
-//    | (x/-2, y) | (x/-1,y) | Subplot (x, y)       | (x/1/0, y) | (x/2, y) |
-//    |           |          |                      |            |          |
-//    +-----------+----------+----------------------+------------+----------+
+//    +-----------+----------+----------------------+----------+------------+
+//    | Padding   | YTicks   |                      | Padding  | VLabel     |
+//    | (x/-2, y) | (x/-1,y) | Subplot (x, y)       | (x/2, y) | (x/3/0, y) |
+//    |           |          |                      |          |            |
+//    +-----------+----------+----------------------+----------+------------+
 //                           | XTicks (x, y/1)      |
 //                           +----------------------+
 //                           | Padding (x, y/2)     |
@@ -189,7 +189,7 @@ func addSubplotLabels(elts []*plotElt) []*plotElt {
 			typ:    eltHLabel,
 			label:  vBand.label,
 			xPath:  eltPath{r.x1},
-			yPath:  eltPath{r.y1, -1, -r.level},
+			yPath:  eltPath{r.y1, -3, -r.level},
 			x2Path: eltPath{r.x2},
 			layout: new(layout.Leaf).SetMin(0, textLeading).SetFlex(true, false),
 		})
@@ -198,7 +198,7 @@ func addSubplotLabels(elts []*plotElt) []*plotElt {
 		elts = append(elts, &plotElt{
 			typ:    eltVLabel,
 			label:  hBand.label,
-			xPath:  eltPath{r.x2, 1, r.level},
+			xPath:  eltPath{r.x2, 3, r.level},
 			yPath:  eltPath{r.y1},
 			y2Path: eltPath{r.y2},
 			layout: new(layout.Leaf).SetMin(textLeading, 0).SetFlex(false, true),
