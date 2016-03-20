@@ -14,6 +14,8 @@ type eltType int
 
 const (
 	eltSubplot eltType = 1 + iota
+	eltXTicks
+	eltYTicks
 	eltHLabel
 	eltVLabel
 	eltPadding
@@ -34,19 +36,24 @@ const (
 // The first level of the hierarchy is simply the coordinate of the
 // plot in the grid. Within this, we layout plot elements as follows:
 //
-//                +----------------------+
-//                | Padding (x, y/-2)    |
-//                +----------------------+
-//                | HLabel (x, y/-1/-1)  |
-//                +----------------------+
-//                | Hlabel (x, y/-1/0)   |
-//    +-----------+----------------------+------------+----------+
-//    | Padding   |                      | VLabel     | Padding  |
-//    | (x/-2, y) | Subplot (x, y)       | (x/1/0, y) | (x/2, y) |
-//    |           |                      |            |          |
-//    +-----------+----------------------+------------+----------+
-//                | Padding (x, y/2)     |
-//                +----------------------+
+//                           +----------------------+
+//                           | Padding (x, y/-2)    |
+//                           +----------------------+
+//                           | HLabel (x, y/-1/-1)  |
+//                           +----------------------+
+//                           | Hlabel (x, y/-1/0)   |
+//    +-----------+----------+----------------------+------------+----------+
+//    | Padding   | YTicks   |                      | VLabel     | Padding  |
+//    | (x/-2, y) | (x/-1,y) | Subplot (x, y)       | (x/1/0, y) | (x/2, y) |
+//    |           |          |                      |            |          |
+//    +-----------+----------+----------------------+------------+----------+
+//                           | XTicks (x, y/1)      |
+//                           +----------------------+
+//                           | Padding (x, y/2)     |
+//                           +----------------------+
+//
+// TODO: Should I instead think of this as specifying the edges rather
+// than the cells?
 type plotElt struct {
 	typ            eltType
 	xPath, yPath   eltPath // Top left coordinate.
@@ -131,8 +138,52 @@ func addSubplotLabels(elts []*plotElt) []*plotElt {
 		}
 	}
 
-	// Create labels.
+	// Create ticks.
+	//
+	// TODO: If the facet grid isn't total, this can add ticks to
+	// the side of a plot that's in the middle of the grid and
+	// that creates a gap between all of the plots. This seems
+	// like a fundamental limitation of treating this as a grid.
+	// We could either abandon the grid and instead use a
+	// hierarchy of left-of/right-of/above/below relations, or we
+	// could make facets produce a total grid.
+	var prev *plotElt
 	textLeading := measureString(fontSize, "").leading
+	sort.Sort(plotEltSorter{elts, 'x'})
+	for _, elt := range elts {
+		if elt.typ != eltSubplot {
+			continue
+		}
+		if prev == nil || prev.subplot.y != elt.subplot.y || !eqScales(prev, elt, "y") {
+			// Show Y axis ticks.
+			elts = append(elts, &plotElt{
+				typ:    eltYTicks,
+				xPath:  eltPath{elt.subplot.x, -1},
+				yPath:  eltPath{elt.subplot.y},
+				layout: new(layout.Leaf).SetMin(textLeading, 0).SetFlex(false, true),
+			})
+		}
+		prev = elt
+	}
+	sort.Sort(plotEltSorter{elts, 'y'})
+	prev = nil
+	for _, elt := range elts {
+		if elt.typ != eltSubplot {
+			continue
+		}
+		if prev == nil || prev.subplot.x != elt.subplot.x || !eqScales(prev, elt, "x") {
+			// Show X axis ticks.
+			elts = append(elts, &plotElt{
+				typ:    eltXTicks,
+				xPath:  eltPath{elt.subplot.x},
+				yPath:  eltPath{elt.subplot.y, 1},
+				layout: new(layout.Leaf).SetMin(0, textLeading).SetFlex(true, false),
+			})
+		}
+		prev = elt
+	}
+
+	// Create labels.
 	for vBand, r := range vBands {
 		elts = append(elts, &plotElt{
 			typ:    eltHLabel,
@@ -154,6 +205,59 @@ func addSubplotLabels(elts []*plotElt) []*plotElt {
 		})
 	}
 	return elts
+}
+
+// plotEltSorter sorts subplot plotElts by subplot (x, y) position.
+type plotEltSorter struct {
+	elts []*plotElt
+
+	// dir indicates primary sorting direction: 'x' means to sort
+	// left-to-right, top-to-bottom; 'y' means to sort
+	// bottom-to-top, left-to-right.
+	dir rune
+}
+
+func (s plotEltSorter) Len() int {
+	return len(s.elts)
+}
+
+func (s plotEltSorter) Less(i, j int) bool {
+	a, b := s.elts[i], s.elts[j]
+	// Put non-subplots first; consider them equal.
+	if a.typ != b.typ {
+		return b.typ == eltSubplot
+	} else if a.typ != eltSubplot {
+		return false
+	}
+
+	if s.dir == 'x' {
+		if a.subplot.y != b.subplot.y {
+			return a.subplot.y < b.subplot.y
+		}
+		return a.subplot.x < b.subplot.x
+	} else {
+		if a.subplot.x != b.subplot.x {
+			return a.subplot.x < b.subplot.x
+		}
+		return a.subplot.y > b.subplot.y
+	}
+}
+
+func (s plotEltSorter) Swap(i, j int) {
+	s.elts[i], s.elts[j] = s.elts[j], s.elts[i]
+}
+
+func eqScales(a, b *plotElt, aes string) bool {
+	sa, sb := a.scales[aes], b.scales[aes]
+	if len(sa) != len(sb) {
+		return false
+	}
+	for k, v := range sa {
+		if sb[k] != v {
+			return false
+		}
+	}
+	return true
 }
 
 type eltPath []int
