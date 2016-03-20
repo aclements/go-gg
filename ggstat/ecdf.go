@@ -5,6 +5,7 @@
 package ggstat
 
 import (
+	"github.com/aclements/go-gg/generic"
 	"github.com/aclements/go-gg/table"
 	"github.com/aclements/go-moremath/vec"
 )
@@ -33,11 +34,10 @@ func ECDF(g table.Grouping, xcol, wcol string) table.Grouping {
 	g = table.SortBy(g, xcol)
 	return table.MapTables(func(_ table.GroupID, t *table.Table) *table.Table {
 		// Get input columns.
-		// TODO: Coerce to []float64
-		xs := t.MustColumn(xcol).([]float64)
-		ws := ([]float64)(nil)
+		var xs, ws []float64
+		generic.ConvertSlice(&xs, t.MustColumn(xcol))
 		if wcol != "" {
-			ws = t.MustColumn(wcol).([]float64)
+			generic.ConvertSlice(&ws, t.MustColumn(wcol))
 		}
 
 		// Ignore empty tables.
