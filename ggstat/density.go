@@ -16,6 +16,8 @@ import (
 // TODO: I'm experimenting with different representations for stats.
 // Make them consistent at some point.
 
+// TODO: Default to first (and second) column for X (and Y)?
+
 // Density constructs a probability density estimate from a set of
 // samples using kernel density estimation.
 //
