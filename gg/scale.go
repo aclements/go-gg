@@ -104,9 +104,12 @@ type Scaler interface {
 	// input space, but that obviously doesn't work for discrete
 	// scales if I want the ticks between values. It could return
 	// values in the intermediate space or the output space.
-	// Currently it returns values in the output space or nil if
-	// ticks don't make sense.
-	Ticks(n int) (major, minor []float64)
+	// Intermediate space works for continuous and discrete
+	// inputs, but not for discrete ranges (maybe that's okay).
+	// Output space is bad because I change the plot location in
+	// the course of layout. Currently it returns values in the
+	// input space or nil if ticks don't make sense.
+	Ticks(n int) (major, minor table.Slice, labels []string)
 
 	CloneScaler() Scaler
 }
@@ -182,7 +185,7 @@ func (s *defaultScale) Map(x interface{}) interface{} {
 	return s.ensure().Map(x)
 }
 
-func (s *defaultScale) Ticks(n int) (major, minor []float64) {
+func (s *defaultScale) Ticks(n int) (major, minor table.Slice, labels []string) {
 	return s.ensure().Ticks(n)
 }
 
@@ -249,7 +252,10 @@ func (s *identityScale) RangeType() reflect.Type {
 func (s *identityScale) Ranger(r Ranger) Ranger                  { return nil }
 func (s *identityScale) DiscreteRange(r interface{}) interface{} { return nil }
 func (s *identityScale) Map(x interface{}) interface{}           { return x }
-func (s *identityScale) Ticks(n int) (major, minor []float64)    { return nil, nil }
+
+func (s *identityScale) Ticks(n int) (major, minor table.Slice, labels []string) {
+	return nil, nil, nil
+}
 
 func (s *identityScale) CloneScaler() Scaler {
 	s2 := *s
@@ -320,20 +326,22 @@ func (s *linearScale) Map(x interface{}) interface{} {
 	return s.r.Map(ls.Map(v))
 }
 
-func (s *linearScale) Ticks(n int) (major, minor []float64) {
+func (s *linearScale) Ticks(n int) (major, minor table.Slice, labels []string) {
 	ls := s.s
 	if math.IsNaN(ls.Min) {
 		ls.Min, ls.Max = -1, 1
 	}
-	major, minor = ls.Ticks(n)
-	// Map input domain to output range.
-	for i := range major {
-		major[i] = s.r.Map(ls.Map(major[i])).(float64)
+	majorx, minorx := ls.Ticks(n)
+
+	// Compute labels.
+	//
+	// TODO: Custom label formats.
+	labels = make([]string, len(majorx))
+	for i, x := range majorx {
+		labels[i] = fmt.Sprintf("%g", x)
 	}
-	for i := range minor {
-		minor[i] = s.r.Map(ls.Map(minor[i])).(float64)
-	}
-	return
+
+	return majorx, minorx, labels
 }
 
 func (s *linearScale) CloneScaler() Scaler {
@@ -369,4 +377,19 @@ func (r *floatRanger) Unmap(y interface{}) float64 {
 
 func (r *floatRanger) RangeType() reflect.Type {
 	return float64Type
+}
+
+// mapMany applies scaler.Map to all of the values in seq and returns
+// a slice of the results.
+//
+// TODO: Maybe this should just be how Scaler.Map works.
+func mapMany(scaler Scaler, seq table.Slice) table.Slice {
+	sv := reflect.ValueOf(seq)
+	rt := reflect.SliceOf(scaler.RangeType())
+	res := reflect.MakeSlice(rt, sv.Len(), sv.Len())
+	for i, len := 0, sv.Len(); i < len; i++ {
+		val := scaler.Map(sv.Index(i).Interface())
+		res.Index(i).Set(reflect.ValueOf(val))
+	}
+	return res.Interface()
 }

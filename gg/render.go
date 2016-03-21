@@ -20,8 +20,12 @@ import (
 // TODO: Theme.
 const fontSize float64 = 12
 
+const xTickSep = 0 // TODO: Theme.
+
+const yTickSep = 5 // TODO: Theme.
+
 func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
-	// TODO: Scales marks, axis labels, legend.
+	// TODO: Axis labels, legend.
 
 	// TODO: Check if the same scaler is used for multiple
 	// aesthetics with conflicting rangers.
@@ -90,7 +94,55 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 
 	// Compute plot element layout.
 	plotElts = addSubplotLabels(plotElts)
-	layoutPlotElts(plotElts).SetLayout(0, 0, float64(width), float64(height))
+	layout := layoutPlotElts(plotElts)
+
+	// Perform layout. There's a cyclic dependency involving tick
+	// labels here: the tick labels depend on how many ticks there
+	// are, how many ticks there are depends on the size of the
+	// plot, the size of the plot depends on its surrounding
+	// content, and the size of the surrounding content depends on
+	// the tick labels. There may not be a fixed point here, so we
+	// compromise around the number of ticks.
+	//
+	// 1) Lay out the graphs without ticks.
+	layout.SetLayout(0, 0, float64(width), float64(height))
+	// 2) Compute the number of ticks and tick labels.
+	const tickDistance = 50 // TODO: Theme. Min pixels between ticks.
+	for _, elt := range plotElts {
+		if elt.typ != eltSubplot {
+			continue
+		}
+
+		elt.clearTicks()
+		if elt.xticks != nil {
+			elt.xticks.clearTicks()
+		}
+		if elt.yticks != nil {
+			elt.yticks.clearTicks()
+		}
+
+		_, _, w, h := elt.layout.Layout()
+		genTicks := func(aes string, size float64, ticksElt *plotElt) {
+			for s := range elt.scales[aes] {
+				nTicks := int(size / tickDistance)
+				if nTicks < 1 {
+					nTicks = 1
+				}
+				major, _, labels := s.Ticks(nTicks)
+				elt.addTicks(s, major, labels)
+				if ticksElt != nil {
+					ticksElt.addTicks(s, major, labels)
+				}
+			}
+			if ticksElt != nil {
+				ticksElt.measureLabels()
+			}
+		}
+		genTicks("x", w, elt.xticks)
+		genTicks("y", h, elt.yticks)
+	}
+	// 3) Re-layout the plot and stick with the ticks we computed.
+	layout.SetLayout(0, 0, float64(width), float64(height))
 
 	// Draw.
 	svg := svg.New(w)
@@ -100,6 +152,26 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 	// Render each plot element.
 	for _, elt := range plotElts {
 		x, y, w, h := elt.layout.Layout()
+
+		if elt.typ == eltXTicks || elt.typ == eltYTicks {
+			for s, ticks := range elt.ticks {
+				if elt.typ == eltXTicks {
+					s.Ranger(NewFloatRanger(x, x+w))
+				} else {
+					s.Ranger(NewFloatRanger(y+h, y))
+				}
+				pos := mapMany(s, ticks.major).([]float64)
+				for i, label := range ticks.labels {
+					tick := pos[i]
+					if elt.typ == eltXTicks {
+						svg.Text(int(tick), int(y+xTickSep), label, `text-anchor="middle" dy="1em"`)
+					} else {
+						svg.Text(int(x+w-yTickSep), int(tick), label, `text-anchor="end" dy=".3em"`)
+					}
+				}
+			}
+			continue
+		}
 
 		if elt.typ == eltHLabel || elt.typ == eltVLabel {
 			// TODO: Theme.
@@ -141,32 +213,28 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 			}
 		}
 
-		// Render scales.
+		// Render scale ticks.
 		//
 		// TODO: These tend not to match up nicely in the
 		// bottom left corner. Maybe I need to draw one path
 		// for the two lines and then add tick marks.
 		for s := range elt.scales["x"] {
-			renderScale(svg, 'x', s, y+h)
+			renderScale(svg, 'x', s, elt.ticks[s], y+h)
 		}
 		for s := range elt.scales["y"] {
-			renderScale(svg, 'y', s, x)
+			renderScale(svg, 'y', s, elt.ticks[s], x)
 		}
 	}
 
 	return nil
 }
 
-func renderScale(svg *svg.SVG, dir rune, scale Scaler, pos float64) {
+func renderScale(svg *svg.SVG, dir rune, scale Scaler, ticks plotEltTicks, pos float64) {
 	const length float64 = 4 // TODO: Theme
 
 	ranger := scale.Ranger(nil)
 	p0, p1 := ranger.Map(0).(float64), ranger.Map(1).(float64)
-	nTicks := int(math.Abs(p0-p1) / 50)
-	if nTicks < 1 {
-		nTicks = 1
-	}
-	major, _ := scale.Ticks(nTicks)
+	major := mapMany(scale, ticks.major).([]float64)
 
 	r := func(x float64) float64 {
 		// Round to nearest N.
@@ -223,15 +291,7 @@ func (env *renderEnv) get(sd *scaledData) table.Slice {
 	}
 
 	v := sd.seqs[env.gid]
-	rv := reflect.ValueOf(v.seq)
-	rt := reflect.SliceOf(v.scaler.RangeType())
-	mv := reflect.MakeSlice(rt, rv.Len(), rv.Len())
-	for i := 0; i < rv.Len(); i++ {
-		m1 := v.scaler.Map(rv.Index(i).Interface())
-		mv.Index(i).Set(reflect.ValueOf(m1))
-	}
-
-	mapped := mv.Interface()
+	mapped := mapMany(v.scaler, v.seq)
 	env.cache[cacheKey] = mapped
 	return mapped
 }

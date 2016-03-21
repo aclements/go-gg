@@ -8,6 +8,7 @@ import (
 	"sort"
 
 	"github.com/aclements/go-gg/gg/layout"
+	"github.com/aclements/go-gg/table"
 )
 
 type eltType int
@@ -54,6 +55,9 @@ const (
 //
 // TODO: Should I instead think of this as specifying the edges rather
 // than the cells?
+//
+// TODO: This is turning into a dumping ground. Maybe I want different
+// types for different kinds of elements?
 type plotElt struct {
 	typ            eltType
 	xPath, yPath   eltPath // Top left coordinate.
@@ -63,6 +67,12 @@ type plotElt struct {
 	subplot *subplot
 	marks   []plotMark
 	scales  map[string]map[Scaler]bool
+	// xticks and yticks are the eltXTicks and eltYTicks for this
+	// subplot, or nil for no ticks.
+	xticks, yticks *plotElt
+
+	// For subplot and ticks elements.
+	ticks map[Scaler]plotEltTicks
 
 	// For label elements.
 	label string
@@ -75,6 +85,11 @@ type plotElt struct {
 	layout *layout.Leaf
 }
 
+type plotEltTicks struct {
+	major  table.Slice
+	labels []string
+}
+
 func newPlotElt(s *subplot) *plotElt {
 	return &plotElt{
 		typ:     eltSubplot,
@@ -84,6 +99,36 @@ func newPlotElt(s *subplot) *plotElt {
 		yPath:   eltPath{s.y},
 		layout:  new(layout.Leaf).SetFlex(true, true),
 	}
+}
+
+func (e *plotElt) clearTicks() {
+	e.ticks = make(map[Scaler]plotEltTicks)
+}
+
+func (e *plotElt) addTicks(scaler Scaler, major table.Slice, labels []string) {
+	e.ticks[scaler] = plotEltTicks{major, labels}
+}
+
+func (e *plotElt) measureLabels() {
+	var maxWidth, maxHeight float64
+	for _, ticks := range e.ticks {
+		for _, label := range ticks.labels {
+			metrics := measureString(fontSize, label)
+			if metrics.leading > maxHeight {
+				maxHeight = metrics.leading
+			}
+			if metrics.width > maxWidth {
+				maxWidth = metrics.width
+			}
+		}
+	}
+	switch e.typ {
+	case eltXTicks:
+		maxHeight += xTickSep
+	case eltYTicks:
+		maxWidth += yTickSep
+	}
+	e.layout.SetMin(maxWidth, maxHeight)
 }
 
 func addSubplotLabels(elts []*plotElt) []*plotElt {
@@ -148,7 +193,6 @@ func addSubplotLabels(elts []*plotElt) []*plotElt {
 	// hierarchy of left-of/right-of/above/below relations, or we
 	// could make facets produce a total grid.
 	var prev *plotElt
-	textLeading := measureString(fontSize, "").leading
 	sort.Sort(plotEltSorter{elts, 'x'})
 	for _, elt := range elts {
 		if elt.typ != eltSubplot {
@@ -160,8 +204,9 @@ func addSubplotLabels(elts []*plotElt) []*plotElt {
 				typ:    eltYTicks,
 				xPath:  eltPath{elt.subplot.x, -1},
 				yPath:  eltPath{elt.subplot.y},
-				layout: new(layout.Leaf).SetMin(textLeading, 0).SetFlex(false, true),
+				layout: new(layout.Leaf).SetFlex(false, true),
 			})
+			elt.yticks = elts[len(elts)-1]
 		}
 		prev = elt
 	}
@@ -177,13 +222,15 @@ func addSubplotLabels(elts []*plotElt) []*plotElt {
 				typ:    eltXTicks,
 				xPath:  eltPath{elt.subplot.x},
 				yPath:  eltPath{elt.subplot.y, 1},
-				layout: new(layout.Leaf).SetMin(0, textLeading).SetFlex(true, false),
+				layout: new(layout.Leaf).SetFlex(true, false),
 			})
+			elt.xticks = elts[len(elts)-1]
 		}
 		prev = elt
 	}
 
 	// Create labels.
+	textLeading := measureString(fontSize, "").leading
 	for vBand, r := range vBands {
 		elts = append(elts, &plotElt{
 			typ:    eltHLabel,
