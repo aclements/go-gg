@@ -72,7 +72,8 @@ type plotElt struct {
 	xticks, yticks *plotElt
 
 	// For subplot and ticks elements.
-	ticks map[Scaler]plotEltTicks
+	ticks    map[Scaler]plotEltTicks
+	ticksFor *plotElt // eltSubplot element
 
 	// For label elements.
 	label string
@@ -201,10 +202,11 @@ func addSubplotLabels(elts []*plotElt) []*plotElt {
 		if prev == nil || prev.subplot.y != elt.subplot.y || !eqScales(prev, elt, "y") {
 			// Show Y axis ticks.
 			elts = append(elts, &plotElt{
-				typ:    eltYTicks,
-				xPath:  eltPath{elt.subplot.x, -1},
-				yPath:  eltPath{elt.subplot.y},
-				layout: new(layout.Leaf).SetFlex(false, true),
+				typ:      eltYTicks,
+				xPath:    eltPath{elt.subplot.x, -1},
+				yPath:    eltPath{elt.subplot.y},
+				ticksFor: elt,
+				layout:   new(layout.Leaf).SetFlex(false, true),
 			})
 			elt.yticks = elts[len(elts)-1]
 		}
@@ -219,10 +221,11 @@ func addSubplotLabels(elts []*plotElt) []*plotElt {
 		if prev == nil || prev.subplot.x != elt.subplot.x || !eqScales(prev, elt, "x") {
 			// Show X axis ticks.
 			elts = append(elts, &plotElt{
-				typ:    eltXTicks,
-				xPath:  eltPath{elt.subplot.x},
-				yPath:  eltPath{elt.subplot.y, 1},
-				layout: new(layout.Leaf).SetFlex(true, false),
+				typ:      eltXTicks,
+				xPath:    eltPath{elt.subplot.x},
+				yPath:    eltPath{elt.subplot.y, 1},
+				ticksFor: elt,
+				layout:   new(layout.Leaf).SetFlex(true, false),
 			})
 			elt.xticks = elts[len(elts)-1]
 		}

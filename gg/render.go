@@ -33,6 +33,20 @@ const xTickSep = 0 // TODO: Theme.
 
 const yTickSep = 5 // TODO: Theme.
 
+// plotMargins returns the top, right, bottom, and left margins for a
+// plot of the given width and height.
+//
+// By default, this adds a 5% margin based on the smaller of width and
+// height. This ensures that (with automatic scales), the extremes of
+// the data and its tick labels don't appear right at the edge of the
+// plot area.
+//
+// TODO: Theme.
+var plotMargins = func(w, h float64) (t, r, b, l float64) {
+	margin := 0.05 * math.Min(w, h)
+	return margin, margin, margin, margin
+}
+
 func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 	// TODO: Axis labels, legend.
 
@@ -53,12 +67,6 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 
 	// TODO: Let the user alternatively specify the width and
 	// height of the subplots, rather than the whole plot.
-
-	// TODO: Add margin to plots. This is somewhat tricky because
-	// we still want to show ticks in those margins; if we just
-	// narrow the ranger, we need a way to ask for the full range
-	// of ticks. What we really want is to expand the domain
-	// slightly, but what does that mean for discrete scales?
 
 	// TODO: Automatic aspect ratio by averaging slopes.
 
@@ -162,12 +170,24 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 	for _, elt := range plotElts {
 		x, y, w, h := elt.layout.Layout()
 
+		var xRanger, yRanger Ranger
+		switch elt.typ {
+		case eltSubplot, eltXTicks, eltYTicks:
+			plotw, ploth := w, h
+			if elt.typ != eltSubplot {
+				_, _, plotw, ploth = elt.ticksFor.layout.Layout()
+			}
+			mt, mr, mb, ml := plotMargins(plotw, ploth)
+			xRanger = NewFloatRanger(x+ml, x+w-mr)
+			yRanger = NewFloatRanger(y+h-mb, y+mt)
+		}
+
 		if elt.typ == eltXTicks || elt.typ == eltYTicks {
 			for s, ticks := range elt.ticks {
 				if elt.typ == eltXTicks {
-					s.Ranger(NewFloatRanger(x, x+w))
+					s.Ranger(xRanger)
 				} else {
-					s.Ranger(NewFloatRanger(y+h, y))
+					s.Ranger(yRanger)
 				}
 				pos := mapMany(s, ticks.major).([]float64)
 				for i, label := range ticks.labels {
@@ -199,10 +219,10 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 
 		// Set scale ranges.
 		for s := range elt.scales["x"] {
-			s.Ranger(NewFloatRanger(x, x+w))
+			s.Ranger(xRanger)
 		}
 		for s := range elt.scales["y"] {
-			s.Ranger(NewFloatRanger(y+h, y))
+			s.Ranger(yRanger)
 		}
 
 		// Render marks.
@@ -221,6 +241,13 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 				mark.m.mark(env, svg)
 			}
 		}
+
+		// Render border.
+		r := func(x float64) float64 {
+			// Round to nearest N.
+			return math.Floor(x + 0.5)
+		}
+		svg.Path(fmt.Sprintf("M%g %gV%gH%g", r(x), r(y), r(y+h), r(x+w)), "stroke:#888; fill:none; stroke-width:2") // TODO: Theme.
 
 		// Render scale ticks.
 		//
@@ -241,33 +268,22 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 func renderScale(svg *svg.SVG, dir rune, scale Scaler, ticks plotEltTicks, pos float64) {
 	const length float64 = 4 // TODO: Theme
 
-	ranger := scale.Ranger(nil)
-	p0, p1 := ranger.Map(0).(float64), ranger.Map(1).(float64)
 	major := mapMany(scale, ticks.major).([]float64)
 
 	r := func(x float64) float64 {
 		// Round to nearest N.
 		return math.Floor(x + 0.5)
 	}
-	h := func(x float64) float64 {
-		// Round to nearest N+0.5.
-		return math.Floor(x) + 0.5
-	}
 	var path []string
-	if dir == 'x' {
-		path = append(path, fmt.Sprintf("M%.6g %.6gH%.6g", r(p0), h(pos), r(p1)))
-	} else {
-		path = append(path, fmt.Sprintf("M%.6g %.6gV%.6g", h(pos), r(p0), r(p1)))
-	}
 	for _, p := range major {
 		if dir == 'x' {
-			path = append(path, fmt.Sprintf("M%.6g %.6gv%.6g", h(p), r(pos), -length))
+			path = append(path, fmt.Sprintf("M%.6g %.6gv%.6g", r(p), r(pos), -length))
 		} else {
-			path = append(path, fmt.Sprintf("M%.6g %.6gh%.6g", r(pos), h(p), length))
+			path = append(path, fmt.Sprintf("M%.6g %.6gh%.6g", r(pos), r(p), length))
 		}
 	}
 
-	svg.Path(strings.Join(path, ""), "stroke:#888") // TODO: Theme
+	svg.Path(strings.Join(path, ""), "stroke:#888; stroke-width:2") // TODO: Theme
 }
 
 type renderEnv struct {
