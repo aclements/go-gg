@@ -123,3 +123,30 @@ func (l LayerPaths) Apply(p *Plot) {
 		p.use("fill", l.Fill),
 	}, p.Data().Tables()})
 }
+
+// LayerPoints layers a point mark at each data point.
+type LayerPoints struct {
+	// X and Y name columns that define the location of each
+	// point. If these are empty, they default to the first and
+	// second columns, respectively.
+	X, Y string
+
+	// XXX Color, fill, size, shape
+}
+
+func (l *LayerPoints) resolveDefaults() {
+	if l.X == "" {
+		l.X = "@0"
+	}
+	if l.Y == "" {
+		l.Y = "@1"
+	}
+}
+
+func (l LayerPoints) Apply(p *Plot) {
+	l.resolveDefaults()
+	p.marks = append(p.marks, plotMark{&markPoint{
+		p.use("x", l.X),
+		p.use("y", l.Y),
+	}, p.Data().Tables()})
+}
