@@ -20,6 +20,15 @@ import (
 // TODO: Theme.
 const fontSize float64 = 12
 
+// facetLabelHeight is the height of facet labels, as a multiple of
+// the font height.
+//
+// TODO: Should this be a multiple of fontSize, em height, leading?
+// Currently it's leading.
+//
+// TODO: Theme.
+const facetLabelHeight = 1.3
+
 const xTickSep = 0 // TODO: Theme.
 
 const yTickSep = 5 // TODO: Theme.

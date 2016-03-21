@@ -238,7 +238,7 @@ func addSubplotLabels(elts []*plotElt) []*plotElt {
 			xPath:  eltPath{r.x1},
 			yPath:  eltPath{r.y1, -3, -r.level},
 			x2Path: eltPath{r.x2},
-			layout: new(layout.Leaf).SetMin(0, textLeading).SetFlex(true, false),
+			layout: new(layout.Leaf).SetMin(0, textLeading*facetLabelHeight).SetFlex(true, false),
 		})
 	}
 	for hBand, r := range hBands {
@@ -248,7 +248,7 @@ func addSubplotLabels(elts []*plotElt) []*plotElt {
 			xPath:  eltPath{r.x2, 3, r.level},
 			yPath:  eltPath{r.y1},
 			y2Path: eltPath{r.y2},
-			layout: new(layout.Leaf).SetMin(textLeading, 0).SetFlex(false, true),
+			layout: new(layout.Leaf).SetMin(textLeading*facetLabelHeight, 0).SetFlex(false, true),
 		})
 	}
 	return elts
