@@ -29,7 +29,7 @@ const fontSize float64 = 12
 // TODO: Theme.
 const facetLabelHeight = 1.3
 
-const xTickSep = 0 // TODO: Theme.
+const xTickSep = 5 // TODO: Theme.
 
 const yTickSep = 5 // TODO: Theme.
 
@@ -163,7 +163,7 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 
 	// Draw.
 	svg := svg.New(w)
-	svg.Start(width, height, fmt.Sprintf(`font-size="%.6gpx"`, fontSize))
+	svg.Start(width, height, fmt.Sprintf(`font-size="%.6gpx" font-family="sans-serif"`, fontSize))
 	defer svg.End()
 
 	// Render each plot element.
