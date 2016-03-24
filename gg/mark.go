@@ -145,7 +145,7 @@ func drawPath(canvas *svg.SVG, xs, ys []float64, strokes []color.Gray16, fill co
 
 	// XXX Stroke width
 
-	style := cssPaint("stroke", stroke) + ";" + cssPaint("fill", fill)
+	style := cssPaint("stroke", stroke) + ";" + cssPaint("fill", fill) + ";stroke-width:3"
 	canvas.Path(string(path), style)
 }
 
@@ -157,7 +157,7 @@ func (m *markPoint) mark(env *renderEnv, canvas *svg.SVG) {
 	xs, ys := env.get(m.x).([]float64), env.get(m.y).([]float64)
 
 	for i := range xs {
-		canvas.Circle(int(xs[i]), int(ys[i]), 3)
+		canvas.Circle(int(xs[i]), int(ys[i]), 4)
 	}
 }
 

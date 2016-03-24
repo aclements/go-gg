@@ -369,7 +369,7 @@ func (s eltPaths) find(p eltPath) int {
 // layoutPlotElts flattens the X and Y paths of elts into simple
 // coordinate indexes and constructs a layout.Grid.
 func layoutPlotElts(elts []*plotElt) layout.Element {
-	const padding = 2 // TODO: Theme.
+	const padding = 4 // TODO: Theme.
 
 	// Add padding elements to each subplot.
 	//

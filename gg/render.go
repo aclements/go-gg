@@ -178,6 +178,10 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 				_, _, plotw, ploth = elt.ticksFor.layout.Layout()
 			}
 			mt, mr, mb, ml := plotMargins(plotw, ploth)
+			// TODO: This doesn't show ticks in the margin
+			// area. This may be fine with niced tick
+			// labels, but it tends to look bad with
+			// un-niced ticks.
 			xRanger = NewFloatRanger(x+ml, x+w-mr)
 			yRanger = NewFloatRanger(y+h-mb, y+mt)
 		}
@@ -193,9 +197,9 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 				for i, label := range ticks.labels {
 					tick := pos[i]
 					if elt.typ == eltXTicks {
-						svg.Text(int(tick), int(y+xTickSep), label, `text-anchor="middle" dy="1em"`)
+						svg.Text(int(tick), int(y+xTickSep), label, `text-anchor="middle" dy="1em" fill="#888"`) // TODO: Theme.
 					} else {
-						svg.Text(int(x+w-yTickSep), int(tick), label, `text-anchor="end" dy=".3em"`)
+						svg.Text(int(x+w-yTickSep), int(tick), label, `text-anchor="end" dy=".3em" fill="#888"`)
 					}
 				}
 			}
@@ -225,6 +229,15 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 			s.Ranger(yRanger)
 		}
 
+		// Render grid.
+		renderBackground(svg, x, y, w, h)
+		for s := range elt.scales["x"] {
+			renderGrid(svg, 'x', s, elt.ticks[s], y, y+h)
+		}
+		for s := range elt.scales["y"] {
+			renderGrid(svg, 'y', s, elt.ticks[s], x, x+w)
+		}
+
 		// Render marks.
 		//
 		// TODO: Clip to plot area.
@@ -241,6 +254,11 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 				mark.m.mark(env, svg)
 			}
 		}
+
+		// Skip border and scale ticks.
+		//
+		// TODO: Theme.
+		continue
 
 		// Render border.
 		r := func(x float64) float64 {
@@ -263,6 +281,35 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 	}
 
 	return nil
+}
+
+func renderBackground(svg *svg.SVG, x, y, w, h float64) {
+	r := func(x float64) int {
+		// Round to nearest N.
+		return int(math.Floor(x + 0.5))
+	}
+
+	svg.Rect(r(x), r(y), r(x+w)-r(x), r(y+h)-r(y), "fill:#eee") // TODO: Theme.
+}
+
+func renderGrid(svg *svg.SVG, dir rune, scale Scaler, ticks plotEltTicks, start, end float64) {
+	major := mapMany(scale, ticks.major).([]float64)
+
+	r := func(x float64) float64 {
+		// Round to nearest N.
+		return math.Floor(x + 0.5)
+	}
+
+	var path []string
+	for _, p := range major {
+		if dir == 'x' {
+			path = append(path, fmt.Sprintf("M%.6g %.6gv%.6g", r(p), r(start), r(end)-r(start)))
+		} else {
+			path = append(path, fmt.Sprintf("M%.6g %.6gh%.6g", r(start), r(p), r(end)-r(start)))
+		}
+	}
+
+	svg.Path(strings.Join(path, ""), "stroke: #fff; stroke-width:2") // TODO: Theme.
 }
 
 func renderScale(svg *svg.SVG, dir rune, scale Scaler, ticks plotEltTicks, pos float64) {
