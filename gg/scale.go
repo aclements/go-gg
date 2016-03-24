@@ -114,6 +114,19 @@ type Scaler interface {
 	CloneScaler() Scaler
 }
 
+type ContinuousScaler interface {
+	Scaler
+
+	// TODO: There are two variations on min/max. 1) We can force
+	// the min/max, even if there's data beyond it. 2) We can say
+	// min/max has to be at least something, but data can expand
+	// beyond it. In the latter case, maybe min/max doesn't matter
+	// and it's just "include this point".
+
+	SetMin(v float64) ContinuousScaler
+	SetMax(v float64) ContinuousScaler
+}
+
 var float64Type = reflect.TypeOf(float64(0))
 var colorType = reflect.TypeOf((*color.Color)(nil)).Elem()
 
@@ -268,13 +281,19 @@ func (s *identityScale) CloneScaler() Scaler {
 // XXX If I return a Scaler, I can't have methods for setting fixed
 // bounds and such. I don't really want to expose the whole type.
 // Maybe a sub-interface for continuous Scalers?
-func NewLinearScaler() Scaler {
-	return &linearScale{s: scale.Linear{Min: math.NaN(), Max: math.NaN()}}
+func NewLinearScaler() ContinuousScaler {
+	return &linearScale{
+		s:       scale.Linear{Min: math.NaN(), Max: math.NaN()},
+		dataMin: math.NaN(),
+		dataMax: math.NaN(),
+	}
 }
 
 type linearScale struct {
 	s scale.Linear
 	r Ranger
+
+	dataMin, dataMax float64
 }
 
 func (s *linearScale) String() string {
@@ -284,7 +303,7 @@ func (s *linearScale) String() string {
 func (s *linearScale) ExpandDomain(v table.Slice) {
 	var data []float64
 	generic.ConvertSlice(&data, v)
-	min, max := s.s.Min, s.s.Max
+	min, max := s.dataMin, s.dataMax
 	for _, v := range data {
 		if math.IsNaN(v) || math.IsInf(v, 0) {
 			continue
@@ -296,7 +315,35 @@ func (s *linearScale) ExpandDomain(v table.Slice) {
 			max = v
 		}
 	}
-	s.s.Min, s.s.Max = min, max
+	s.dataMin, s.dataMax = min, max
+}
+
+func (s *linearScale) SetMin(v float64) ContinuousScaler {
+	s.s.Min = v
+	return s
+}
+
+func (s *linearScale) SetMax(v float64) ContinuousScaler {
+	s.s.Max = v
+	return s
+}
+
+func (s *linearScale) get() scale.Linear {
+	ls := s.s
+	if ls.Min > ls.Max {
+		ls.Min, ls.Max = ls.Max, ls.Min
+	}
+	if math.IsNaN(ls.Min) {
+		ls.Min = s.dataMin
+	}
+	if math.IsNaN(ls.Max) {
+		ls.Max = s.dataMax
+	}
+	if math.IsNaN(ls.Min) {
+		// Only possible if both dataMin and dataMax are NaN.
+		ls.Min, ls.Max = -1, 1
+	}
+	return ls
 }
 
 func (s *linearScale) Ranger(r Ranger) Ranger {
@@ -317,25 +364,23 @@ func (s *linearScale) RangeType() reflect.Type {
 }
 
 func (s *linearScale) Map(x interface{}) interface{} {
-	ls := s.s
-	if math.IsNaN(ls.Min) {
-		ls.Min, ls.Max = -1, 1
-	}
+	ls := s.get()
 	f64 := reflect.TypeOf(float64(0))
 	v := reflect.ValueOf(x).Convert(f64).Float()
 	return s.r.Map(ls.Map(v))
 }
 
 func (s *linearScale) Ticks(n int) (major, minor table.Slice, labels []string) {
-	ls := s.s
-	if math.IsNaN(ls.Min) {
-		ls.Min, ls.Max = -1, 1
-	}
+	ls := s.get()
 	majorx, minorx := ls.Ticks(n)
 
 	// Compute labels.
 	//
 	// TODO: Custom label formats.
+	//
+	// TODO: If the input type is not a built-in type, it may have
+	// a useful custom String method. If it's integer-typed, maybe
+	// I don't let the tick level go below 0.
 	labels = make([]string, len(majorx))
 	for i, x := range majorx {
 		labels[i] = fmt.Sprintf("%g", x)
