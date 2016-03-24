@@ -229,7 +229,9 @@ type Plotter interface {
 	Apply(*Plot)
 }
 
-func (p *Plot) Add(plotter Plotter) *Plot {
-	plotter.Apply(p)
+func (p *Plot) Add(plotters ...Plotter) *Plot {
+	for _, plotter := range plotters {
+		plotter.Apply(p)
+	}
 	return p
 }
