@@ -24,9 +24,11 @@ import (
 //
 // - Column X is the points at which the LOESS function is sampled.
 //
-// - Column "LOESS" is the result of the LEOSS function.
+// - Column Y is the result of the LEOSS function.
 //
 // TODO: Confidence internals/bootstrap distributions?
+//
+// TODO: Robust LOESS? See https://www.mathworks.com/help/curvefit/smoothing-data.html#bq_6ys3-3
 type LOESS struct {
 	// X and Y are the names of the columns to use for X and Y
 	// values of data points, respectively.
@@ -79,7 +81,7 @@ func (s LOESS) F(g table.Grouping) table.Grouping {
 		eval := evals[gid]
 
 		loess := fit.LOESS(xs, ys, s.Degree, s.Span)
-		return new(table.Table).Add(s.X, eval).Add("LOESS", vec.Map(loess, eval))
+		return new(table.Table).Add(s.X, eval).Add(s.Y, vec.Map(loess, eval))
 	}, g)
 }
 
