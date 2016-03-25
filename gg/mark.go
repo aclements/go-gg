@@ -5,9 +5,16 @@
 package gg
 
 import (
+	"bytes"
+	"encoding/base64"
+	"image"
 	"image/color"
+	"image/png"
+	"math"
+	"sort"
 	"strconv"
 
+	"github.com/aclements/go-gg/generic"
 	"github.com/aclements/go-gg/table"
 	"github.com/ajstarks/svgo"
 )
@@ -159,6 +166,98 @@ func (m *markPoint) mark(env *renderEnv, canvas *svg.SVG) {
 	for i := range xs {
 		canvas.Circle(int(xs[i]), int(ys[i]), 4)
 	}
+}
+
+type markTiles struct {
+	x, y, fill *scaledData
+}
+
+func (m *markTiles) mark(env *renderEnv, canvas *svg.SVG) {
+	xs, ys := env.get(m.x).([]float64), env.get(m.y).([]float64)
+	// TODO: Should the Scaler (or Ranger) ensure that the values
+	// are color.Color? How would this work with an identity
+	// scaler?
+	var fills []color.Color
+	generic.ConvertSlice(&fills, env.get(m.fill))
+
+	// TODO: We can't use an <image> this if the width and height
+	// are specified, or if there is a stroke.
+	// minx, maxx := stats.Bounds(xs)
+	// miny, maxy := stats.Bounds(ys)
+
+	// Compute image bounds.
+	imageBounds := func(vals []float64) (float64, float64, float64, bool) {
+		// Reduce to unique values.
+		unique := []float64{}
+		uset := map[float64]bool{}
+		for _, v := range vals {
+			if !uset[v] {
+				if math.IsNaN(v) || math.IsInf(v, 0) {
+					continue
+				}
+				unique = append(unique, v)
+				uset[v] = true
+			}
+		}
+
+		var minGap float64
+		regular := true
+		switch len(unique) {
+		case 0:
+			return 0, 0, -1, false
+		case 1:
+			minGap = 1.0
+		default:
+			sort.Float64s(unique)
+			minGap = unique[1] - unique[0]
+			for i, u := range unique[1:] {
+				minGap = math.Min(minGap, u-unique[i])
+			}
+			// Consider the spacing "regular" if every
+			// point is within a 1000th of a multiple of
+			// minGap.
+			for _, u := range unique {
+				_, error := math.Modf((u - unique[0]) / minGap)
+				if 0.001 <= error && error <= 0.999 {
+					regular = false
+					break
+				}
+			}
+		}
+		return unique[0], unique[len(unique)-1], minGap, regular
+	}
+	xmin, xmax, xgap, xreg := imageBounds(xs)
+	ymin, ymax, ygap, yreg := imageBounds(ys)
+	if xgap == -1 || ygap == -1 {
+		return
+	}
+	if !xreg || !yreg {
+		// TODO: Can't use an image.
+		panic("not implemented: irregular tile spacing")
+	}
+
+	// TODO: If there are a small number of cells, just make the
+	// rectangles since it's hard to reliably disable
+	// interpolation (e.g., the below doesn't work in rsvg).
+
+	// Create the image.
+	iw, ih := round((xmax-xmin+xgap)/xgap), round((ymax-ymin+ygap)/ygap)
+	img := image.NewRGBA(image.Rect(0, 0, iw, ih))
+	for i := range xs {
+		img.Set(round((xs[i]-xmin)/xgap), round((ys[i]-ymin)/ygap), fills[i])
+	}
+
+	// Encode the image.
+	uri := bytes.NewBufferString("data:image/png;base64,")
+	w := base64.NewEncoder(base64.StdEncoding, uri)
+	if err := png.Encode(w, img); err != nil {
+		Warning.Println("error encoding image:", err)
+		return
+	}
+	w.Close()
+	canvas.Image(round(xmin-xgap/2), round(ymin-ygap/2),
+		round(xmax-xmin+xgap), int(ymax-ymin+ygap),
+		uri.String(), `preserveAspectRatio="none" style="image-rendering:optimizeSpeed;image-rendering:-moz-crisp-edges;image-rendering:-webkit-optimize-contrast;image-rendering:pixelated"`)
 }
 
 // cssPaint returns a CSS fragment for setting CSS property prop to

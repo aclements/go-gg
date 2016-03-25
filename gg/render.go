@@ -384,3 +384,7 @@ func (env *renderEnv) getFirst(sd *scaledData) interface{} {
 	}
 	return v.scaler.Map(rv.Index(0).Interface())
 }
+
+func round(x float64) int {
+	return int(math.Floor(x + 0.5))
+}

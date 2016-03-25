@@ -150,3 +150,54 @@ func (l LayerPoints) Apply(p *Plot) {
 		p.use("y", l.Y),
 	}, p.Data().Tables()})
 }
+
+// LayerTiles layers a rectangle at each data point. The rectangle is
+// specified by its center, width, and height.
+type LayerTiles struct {
+	// X and Y name columns that define the center of each
+	// rectangle. If they are "", they default to the first and
+	// second columns, respectively.
+	X, Y string
+
+	// Width and Height name columns that define the width and
+	// height of each rectangle. If they are "", the width and/or
+	// height are automatically determined from the smallest
+	// spacing between distinct X and Y points.
+	Width, Height string
+
+	// Fill names a column that defines the fill color of each
+	// rectangle. If it is "", the default fill is black.
+	Fill string
+
+	// XXX Stroke color/width, opacity, center adjustment.
+}
+
+func (l *LayerTiles) resolveDefaults() {
+	if l.X == "" {
+		l.X = "@0"
+	}
+	if l.Y == "" {
+		l.Y = "@1"
+	}
+}
+
+func (l LayerTiles) Apply(p *Plot) {
+	l.resolveDefaults()
+	if l.Width != "" || l.Height != "" {
+		// TODO: What scale are these in? (x+width) is in the
+		// X scale, but width itself is not. It doesn't make
+		// sense to train the X scale on width, and if there's
+		// a scale transform, (x+width) has to happen before
+		// the transform. OTOH, if x is discrete, I can't do
+		// (x+width); maybe in that case you just can't
+		// specify a width. OTOOH, if width is specified and
+		// the value is unscaled, I could still do something
+		// reasonable with that if x is discrete.
+		panic("not implemented: non-default width/height")
+	}
+	p.marks = append(p.marks, plotMark{&markTiles{
+		p.use("x", l.X),
+		p.use("y", l.Y),
+		p.use("fill", l.Fill),
+	}, p.Data().Tables()})
+}
