@@ -86,6 +86,9 @@ type LayerPaths struct {
 	// defaults to transparent.
 	Fill string
 
+	// TODO: Color and fill should split groups, rather than
+	// trying to say that a single path can have multiple colors.
+
 	// XXX Perhaps the theme should provide default values for
 	// things like "color". That would suggest we need to resolve
 	// defaults like that at render time. Possibly a special scale

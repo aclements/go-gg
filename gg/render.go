@@ -48,10 +48,18 @@ var plotMargins = func(w, h float64) (t, r, b, l float64) {
 }
 
 func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
-	// TODO: Axis labels, legend.
+	// TODO: Axis labels, legend, title.
 
 	// TODO: Check if the same scaler is used for multiple
-	// aesthetics with conflicting rangers.
+	// aesthetics with conflicting rangers. Alternatively, if we
+	// just computed the scaled data eagerly here, it wouldn't
+	// matter if the same Scaler was used for multiple things
+	// because we would just change its Ranger between scaling
+	// different data. We could still optimize for get/get1 by
+	// specifying whether we care about all of the values or just
+	// the first when fetching the scaledData (arguably this
+	// should also affect scale training, so this is necessary
+	// anyway).
 
 	// TODO: Rather than finding these scales here and giving them
 	// Ratners, we could use special "Width"/"Height" Rangers and
@@ -282,6 +290,8 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 
 	return nil
 }
+
+// TODO: Use shape-rendering: crispEdges?
 
 func renderBackground(svg *svg.SVG, x, y, w, h float64) {
 	r := func(x float64) int {
