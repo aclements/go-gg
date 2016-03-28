@@ -51,33 +51,11 @@ type Group interface {
 	Children() []Element
 }
 
-// Leaf is a leaf in a layout hierarchy. It generally represents some
-// element defined by the user of the package.
+// Leaf is a leaf in a layout hierarchy. It is meant for embedding: it
+// partially implements Element, leaving SizeHint to the embedding
+// type.
 type Leaf struct {
-	minw, minh   float64
-	flexw, flexh bool
-
 	x, y, w, h float64
-}
-
-// TODO: Consider eliminating SizeHint, making Leaf just a handy embed
-// for building leaf Elements.
-
-// SetMin sets the minimum dimensions of this element.
-func (l *Leaf) SetMin(w, h float64) *Leaf {
-	l.minw, l.minh = w, h
-	return l
-}
-
-// SetFlex sets whether the width and height of this element can
-// expand or are fixed at their minimum values.
-func (l *Leaf) SetFlex(flexw, flexh bool) *Leaf {
-	l.flexw, l.flexh = flexw, flexh
-	return l
-}
-
-func (l *Leaf) SizeHint() (w, h float64, flexw, flexh bool) {
-	return l.minw, l.minh, l.flexw, l.flexh
 }
 
 func (l *Leaf) SetLayout(x, y, w, h float64) {
