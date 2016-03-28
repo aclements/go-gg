@@ -78,15 +78,12 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 
 	// TODO: Automatic aspect ratio by averaging slopes.
 
-	// Create rendering environment.
-	env := &renderEnv{cache: make(map[renderCacheKey]table.Slice)}
-
 	// Find all of the subplots and subdivide the marks.
 	//
 	// TODO: If a mark was done in a parent subplot, broadcast it
 	// to all child leafs of that subplot.
-	subplots := make(map[*subplot]*plotElt)
-	plotElts := []*plotElt{}
+	subplots := make(map[*subplot]*eltSubplot)
+	plotElts := []plotElt{}
 	for _, mark := range p.marks {
 		// TODO: This is wrong. If there are non-subplot
 		// groups, it'll add the same mark multiple times to
@@ -95,7 +92,7 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 			subplot := subplotOf(gid)
 			elt := subplots[subplot]
 			if elt == nil {
-				elt = newPlotElt(subplot)
+				elt = newEltSubplot(subplot)
 				plotElts = append(plotElts, elt)
 				subplots[subplot] = elt
 			}
@@ -134,20 +131,13 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 	// 2) Compute the number of ticks and tick labels.
 	const tickDistance = 50 // TODO: Theme. Min pixels between ticks.
 	for _, elt := range plotElts {
-		if elt.typ != eltSubplot {
+		elt, ok := elt.(*eltSubplot)
+		if !ok {
 			continue
 		}
 
-		elt.clearTicks()
-		if elt.xticks != nil {
-			elt.xticks.clearTicks()
-		}
-		if elt.yticks != nil {
-			elt.yticks.clearTicks()
-		}
-
-		_, _, w, h := elt.layout.Layout()
-		genTicks := func(aes string, size float64, ticksElt *plotElt) {
+		_, _, w, h := elt.Layout()
+		genTicks := func(aes string, size float64) {
 			for s := range elt.scales[aes] {
 				nTicks := int(size / tickDistance)
 				if nTicks < 1 {
@@ -155,16 +145,10 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 				}
 				major, _, labels := s.Ticks(nTicks)
 				elt.addTicks(s, major, labels)
-				if ticksElt != nil {
-					ticksElt.addTicks(s, major, labels)
-				}
-			}
-			if ticksElt != nil {
-				ticksElt.measureLabels()
 			}
 		}
-		genTicks("x", w, elt.xticks)
-		genTicks("y", h, elt.yticks)
+		genTicks("x", w)
+		genTicks("y", h)
 	}
 	// 3) Re-layout the plot and stick with the ticks we computed.
 	layout.SetLayout(0, 0, float64(width), float64(height))
@@ -176,119 +160,78 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 
 	// Render each plot element.
 	for _, elt := range plotElts {
-		x, y, w, h := elt.layout.Layout()
-
-		var xRanger, yRanger Ranger
-		switch elt.typ {
-		case eltSubplot, eltXTicks, eltYTicks:
-			plotw, ploth := w, h
-			if elt.typ != eltSubplot {
-				_, _, plotw, ploth = elt.ticksFor.layout.Layout()
-			}
-			mt, mr, mb, ml := plotMargins(plotw, ploth)
-			// TODO: This doesn't show ticks in the margin
-			// area. This may be fine with niced tick
-			// labels, but it tends to look bad with
-			// un-niced ticks.
-			xRanger = NewFloatRanger(x+ml, x+w-mr)
-			yRanger = NewFloatRanger(y+h-mb, y+mt)
-		}
-
-		if elt.typ == eltXTicks || elt.typ == eltYTicks {
-			for s, ticks := range elt.ticks {
-				if elt.typ == eltXTicks {
-					s.Ranger(xRanger)
-				} else {
-					s.Ranger(yRanger)
-				}
-				pos := mapMany(s, ticks.major).([]float64)
-				for i, label := range ticks.labels {
-					tick := pos[i]
-					if elt.typ == eltXTicks {
-						svg.Text(int(tick), int(y+xTickSep), label, `text-anchor="middle" dy="1em" fill="#888"`) // TODO: Theme.
-					} else {
-						svg.Text(int(x+w-yTickSep), int(tick), label, `text-anchor="end" dy=".3em" fill="#888"`)
-					}
-				}
-			}
-			continue
-		}
-
-		if elt.typ == eltHLabel || elt.typ == eltVLabel {
-			// TODO: Theme.
-			//
-			// TODO: Clip to label region.
-			svg.Rect(int(x), int(y), int(w), int(h), "fill: #ccc")
-			// Vertical centering is very poorly
-			// supported. dy is the best chance.
-			style := `text-anchor="middle" dy=".3em"`
-			if elt.typ == eltVLabel {
-				style += fmt.Sprintf(` transform="rotate(90 %d %d)"`, int(x+w/2), int(y+h/2))
-			}
-			svg.Text(int(x+w/2), int(y+h/2), elt.label, style)
-			continue
-		}
-
-		// Set scale ranges.
-		for s := range elt.scales["x"] {
-			s.Ranger(xRanger)
-		}
-		for s := range elt.scales["y"] {
-			s.Ranger(yRanger)
-		}
-
-		// Render grid.
-		renderBackground(svg, x, y, w, h)
-		for s := range elt.scales["x"] {
-			renderGrid(svg, 'x', s, elt.ticks[s], y, y+h)
-		}
-		for s := range elt.scales["y"] {
-			renderGrid(svg, 'y', s, elt.ticks[s], x, x+w)
-		}
-
-		// Render marks.
-		//
-		// TODO: Clip to plot area.
-		for _, mark := range elt.marks {
-			for _, gid := range mark.groups {
-				if subplotOf(gid) != elt.subplot {
-					// TODO: Figure this out when
-					// we're building subplots.
-					// This is asymptotically
-					// inefficient.
-					continue
-				}
-				env.gid = gid
-				mark.m.mark(env, svg)
-			}
-		}
-
-		// Skip border and scale ticks.
-		//
-		// TODO: Theme.
-		continue
-
-		// Render border.
-		r := func(x float64) float64 {
-			// Round to nearest N.
-			return math.Floor(x + 0.5)
-		}
-		svg.Path(fmt.Sprintf("M%g %gV%gH%g", r(x), r(y), r(y+h), r(x+w)), "stroke:#888; fill:none; stroke-width:2") // TODO: Theme.
-
-		// Render scale ticks.
-		//
-		// TODO: These tend not to match up nicely in the
-		// bottom left corner. Maybe I need to draw one path
-		// for the two lines and then add tick marks.
-		for s := range elt.scales["x"] {
-			renderScale(svg, 'x', s, elt.ticks[s], y+h)
-		}
-		for s := range elt.scales["y"] {
-			renderScale(svg, 'y', s, elt.ticks[s], x)
-		}
+		elt.render(svg)
 	}
 
 	return nil
+}
+
+func (e *eltSubplot) render(svg *svg.SVG) {
+	x, y, w, h := e.Layout()
+	m := e.plotMargins
+
+	// Set scale ranges.
+	xRanger := NewFloatRanger(x+m.l, x+w-m.r)
+	yRanger := NewFloatRanger(y+h-m.b, y+m.t)
+	for s := range e.scales["x"] {
+		s.Ranger(xRanger)
+	}
+	for s := range e.scales["y"] {
+		s.Ranger(yRanger)
+	}
+
+	// Render grid.
+	renderBackground(svg, x, y, w, h)
+	for s := range e.scales["x"] {
+		renderGrid(svg, 'x', s, e.ticks[s], y, y+h)
+	}
+	for s := range e.scales["y"] {
+		renderGrid(svg, 'y', s, e.ticks[s], x, x+w)
+	}
+
+	// Create rendering environment.
+	env := &renderEnv{cache: make(map[renderCacheKey]table.Slice)}
+
+	// Render marks.
+	//
+	// TODO: Clip to plot area.
+	for _, mark := range e.marks {
+		for _, gid := range mark.groups {
+			if subplotOf(gid) != e.subplot {
+				// TODO: Figure this out when
+				// we're building subplots.
+				// This is asymptotically
+				// inefficient.
+				continue
+			}
+			env.gid = gid
+			mark.m.mark(env, svg)
+		}
+	}
+
+	// Skip border and scale ticks.
+	//
+	// TODO: Theme.
+	return
+
+	// Render border.
+	r := func(x float64) float64 {
+		// Round to nearest N.
+		return math.Floor(x + 0.5)
+	}
+	svg.Path(fmt.Sprintf("M%g %gV%gH%g", r(x), r(y), r(y+h), r(x+w)), "stroke:#888; fill:none; stroke-width:2") // TODO: Theme.
+
+	// Render scale ticks.
+	//
+	// TODO: These tend not to match up nicely in the
+	// bottom left corner. Maybe I need to draw one path
+	// for the two lines and then add tick marks.
+	for s := range e.scales["x"] {
+		renderScale(svg, 'x', s, e.ticks[s], y+h)
+	}
+	for s := range e.scales["y"] {
+		renderScale(svg, 'y', s, e.ticks[s], x)
+	}
 }
 
 // TODO: Use shape-rendering: crispEdges?
@@ -341,6 +284,52 @@ func renderScale(svg *svg.SVG, dir rune, scale Scaler, ticks plotEltTicks, pos f
 	}
 
 	svg.Path(strings.Join(path, ""), "stroke:#888; stroke-width:2") // TODO: Theme
+}
+
+func (e *eltTicks) render(svg *svg.SVG) {
+	x, y, w, h := e.Layout()
+	// TODO: This doesn't show ticks in the margin
+	// area. This may be fine with niced tick
+	// labels, but it tends to look bad with
+	// un-niced ticks.
+	m := e.ticksFor.plotMargins
+	xRanger := NewFloatRanger(x+m.l, x+w-m.r)
+	yRanger := NewFloatRanger(y+h-m.b, y+m.t)
+	for s := range e.scales() {
+		ticks := e.ticksFor.ticks[s]
+		if e.axis == 'x' {
+			s.Ranger(xRanger)
+		} else {
+			s.Ranger(yRanger)
+		}
+		pos := mapMany(s, ticks.major).([]float64)
+		for i, label := range ticks.labels {
+			tick := pos[i]
+			if e.axis == 'x' {
+				svg.Text(int(tick), int(y+xTickSep), label, `text-anchor="middle" dy="1em" fill="#888"`) // TODO: Theme.
+			} else {
+				svg.Text(int(x+w-yTickSep), int(tick), label, `text-anchor="end" dy=".3em" fill="#888"`)
+			}
+		}
+	}
+}
+
+func (e *eltLabel) render(svg *svg.SVG) {
+	// TODO: Theme.
+	//
+	// TODO: Clip to label region.
+	x, y, w, h := e.Layout()
+	svg.Rect(int(x), int(y), int(w), int(h), "fill: #ccc")
+	// Vertical centering is very poorly
+	// supported. dy is the best chance.
+	style := `text-anchor="middle" dy=".3em"`
+	if e.side == 'r' {
+		style += fmt.Sprintf(` transform="rotate(90 %d %d)"`, int(x+w/2), int(y+h/2))
+	}
+	svg.Text(int(x+w/2), int(y+h/2), e.label, style)
+}
+
+func (e *eltPadding) render(svg *svg.SVG) {
 }
 
 type renderEnv struct {

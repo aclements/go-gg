@@ -60,6 +60,9 @@ type Leaf struct {
 	x, y, w, h float64
 }
 
+// TODO: Consider eliminating SizeHint, making Leaf just a handy embed
+// for building leaf Elements.
+
 // SetMin sets the minimum dimensions of this element.
 func (l *Leaf) SetMin(w, h float64) *Leaf {
 	l.minw, l.minh = w, h

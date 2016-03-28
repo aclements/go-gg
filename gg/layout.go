@@ -5,25 +5,15 @@
 package gg
 
 import (
+	"math"
 	"sort"
 
 	"github.com/aclements/go-gg/gg/layout"
 	"github.com/aclements/go-gg/table"
+	"github.com/ajstarks/svgo"
 )
 
-type eltType int
-
-const (
-	eltSubplot eltType = 1 + iota
-	eltXTicks
-	eltYTicks
-	eltHLabel
-	eltVLabel
-	eltPadding
-)
-
-// A plotElt is a high-level element of a plot layout. It is either a
-// subplot body, or a facet label.
+// A plotElt is a high-level element of a plot layout.
 //
 // plotElts are arranged in a 2D grid. Coordinates in the grid are
 // specified by a pair of "paths" rather than a simple pair of
@@ -38,13 +28,13 @@ const (
 // plot in the grid. Within this, we layout plot elements as follows:
 //
 //                           +----------------------+
-//                           | HLabel (x, y/-3/-1)  |
+//                           | Label (x, y/-3/-1)   |
 //                           +----------------------+
-//                           | Hlabel (x, y/-3/0)   |
+//                           | Label (x, y/-3/0)    |
 //                           +----------------------+
 //                           | Padding (x, y/-2)    |
 //    +-----------+----------+----------------------+----------+------------+
-//    | Padding   | YTicks   |                      | Padding  | VLabel     |
+//    | Padding   | YTicks   |                      | Padding  | Label      |
 //    | (x/-2, y) | (x/-1,y) | Subplot (x, y)       | (x/2, y) | (x/3/0, y) |
 //    |           |          |                      |          |            |
 //    +-----------+----------+----------------------+----------+------------+
@@ -55,35 +45,38 @@ const (
 //
 // TODO: Should I instead think of this as specifying the edges rather
 // than the cells?
-//
-// TODO: This is turning into a dumping ground. Maybe I want different
-// types for different kinds of elements?
-type plotElt struct {
-	typ            eltType
-	xPath, yPath   eltPath // Top left coordinate.
-	x2Path, y2Path eltPath // Bottom right. If nil, same as xPath, yPath.
+type plotElt interface {
+	layout.Element
 
-	// For subplot elements.
+	// paths returns the top-left and bottom-right cells of this
+	// element. x2Path and y2Path may be nil, indicating that they
+	// are the same as xPath and yPath.
+	paths() (xPath, yPath, x2Path, y2Path eltPath)
+
+	// render draws this plot element to svg.
+	render(svg *svg.SVG)
+}
+
+type eltCommon struct {
+	xPath, yPath, x2Path, y2Path eltPath
+}
+
+func (c *eltCommon) paths() (xPath, yPath, x2Path, y2Path eltPath) {
+	return c.xPath, c.yPath, c.x2Path, c.y2Path
+}
+
+type eltSubplot struct {
+	eltCommon
+	layout.Leaf
+
 	subplot *subplot
 	marks   []plotMark
 	scales  map[string]map[Scaler]bool
-	// xticks and yticks are the eltXTicks and eltYTicks for this
-	// subplot, or nil for no ticks.
-	xticks, yticks *plotElt
+	ticks   map[Scaler]plotEltTicks
 
-	// For subplot and ticks elements.
-	ticks    map[Scaler]plotEltTicks
-	ticksFor *plotElt // eltSubplot element
-
-	// For label elements.
-	label string
-
-	// x, y, xSpan, and ySpan are the global position and span of
-	// this element. These are computed by layoutPlotElts.
-	x, y         int
-	xSpan, ySpan int
-
-	layout *layout.Leaf
+	plotMargins struct {
+		t, r, b, l float64
+	}
 }
 
 type plotEltTicks struct {
@@ -91,48 +84,183 @@ type plotEltTicks struct {
 	labels []string
 }
 
-func newPlotElt(s *subplot) *plotElt {
-	return &plotElt{
-		typ:     eltSubplot,
-		subplot: s,
-		scales:  make(map[string]map[Scaler]bool),
-		xPath:   eltPath{s.x},
-		yPath:   eltPath{s.y},
-		layout:  new(layout.Leaf).SetFlex(true, true),
+func newEltSubplot(s *subplot) *eltSubplot {
+	return &eltSubplot{
+		eltCommon: eltCommon{xPath: eltPath{s.x}, yPath: eltPath{s.y}},
+		subplot:   s,
+		scales:    make(map[string]map[Scaler]bool),
+		ticks:     make(map[Scaler]plotEltTicks),
 	}
 }
 
-func (e *plotElt) clearTicks() {
-	e.ticks = make(map[Scaler]plotEltTicks)
+func (e *eltSubplot) SizeHint() (w, h float64, flexw, flexh bool) {
+	return 0, 0, true, true
 }
 
-func (e *plotElt) addTicks(scaler Scaler, major table.Slice, labels []string) {
+func (e *eltSubplot) SetLayout(x, y, w, h float64) {
+	e.Leaf.SetLayout(x, y, w, h)
+	m := &e.plotMargins
+	m.t, m.r, m.b, m.l = plotMargins(w, h)
+}
+
+func (e *eltSubplot) addTicks(scaler Scaler, major table.Slice, labels []string) {
 	e.ticks[scaler] = plotEltTicks{major, labels}
 }
 
-func (e *plotElt) measureLabels() {
-	var maxWidth, maxHeight float64
-	for _, ticks := range e.ticks {
-		for _, label := range ticks.labels {
-			metrics := measureString(fontSize, label)
-			if metrics.leading > maxHeight {
-				maxHeight = metrics.leading
-			}
-			if metrics.width > maxWidth {
-				maxWidth = metrics.width
-			}
-		}
-	}
-	switch e.typ {
-	case eltXTicks:
-		maxHeight += xTickSep
-	case eltYTicks:
-		maxWidth += yTickSep
-	}
-	e.layout.SetMin(maxWidth, maxHeight)
+type eltTicks struct {
+	eltCommon
+	layout.Leaf
+
+	axis     rune // 'x' or 'y'
+	ticksFor *eltSubplot
 }
 
-func addSubplotLabels(elts []*plotElt) []*plotElt {
+func newEltTicks(axis rune, s *eltSubplot) *eltTicks {
+	elt := &eltTicks{
+		eltCommon: s.eltCommon,
+		axis:      axis,
+		ticksFor:  s,
+	}
+	switch axis {
+	case 'x':
+		elt.yPath = eltPath{s.subplot.y, 1}
+	case 'y':
+		elt.xPath = eltPath{s.subplot.x, -1}
+	default:
+		panic("bad axis")
+	}
+	return elt
+}
+
+func (e *eltTicks) scales() map[Scaler]bool {
+	switch e.axis {
+	case 'x':
+		return e.ticksFor.scales["x"]
+	case 'y':
+		return e.ticksFor.scales["y"]
+	default:
+		panic("bad axis")
+	}
+}
+
+func (e *eltTicks) SizeHint() (w, h float64, flexw, flexh bool) {
+	if len(e.ticksFor.ticks) == 0 {
+		// Ticks haven't been computed yet or there are none.
+		// Assume this takes up no space.
+		switch e.axis {
+		case 'x':
+			return 0, 0, true, false
+		case 'y':
+			return 0, 0, false, true
+		default:
+			panic("bad axis")
+		}
+	}
+
+	var maxWidth, maxHeight float64
+	for s := range e.scales() {
+		for _, label := range e.ticksFor.ticks[s].labels {
+			metrics := measureString(fontSize, label)
+			maxHeight = math.Max(maxHeight, metrics.leading)
+			maxWidth = math.Max(maxWidth, metrics.width)
+		}
+	}
+	switch e.axis {
+	case 'x':
+		maxHeight += xTickSep
+	case 'y':
+		maxWidth += yTickSep
+	}
+	return maxWidth, maxHeight, e.axis == 'x', e.axis == 'y'
+}
+
+type eltLabel struct {
+	eltCommon
+	layout.Leaf
+
+	side  rune // 't' or 'r'
+	label string
+}
+
+func newEltLabel(side rune, label string, x1, y1, x2, y2 int, level int) *eltLabel {
+	elt := &eltLabel{
+		side:  side,
+		label: label,
+	}
+	switch side {
+	case 't':
+		elt.eltCommon = eltCommon{
+			xPath:  eltPath{x1},
+			yPath:  eltPath{y1, -3, -level},
+			x2Path: eltPath{x2},
+		}
+	case 'r':
+		elt.eltCommon = eltCommon{
+			xPath:  eltPath{x2, 3, level},
+			yPath:  eltPath{y1},
+			y2Path: eltPath{y2},
+		}
+	default:
+		panic("bad side")
+	}
+	return elt
+}
+
+func (e *eltLabel) SizeHint() (w, h float64, flexw, flexh bool) {
+	// TODO: We actually want the height of the text, which could
+	// be N*leading if there are multiple lines.
+	dim := measureString(fontSize, e.label).leading * facetLabelHeight
+	switch e.side {
+	case 't':
+		return 0, dim, true, false
+	case 'r':
+		return dim, 0, false, true
+	default:
+		panic("bad side")
+	}
+}
+
+type eltPadding struct {
+	eltCommon
+	layout.Leaf
+
+	side rune // 't', 'b', 'l', 'r'
+}
+
+func newEltPadding(side rune, x, y int) *eltPadding {
+	elt := &eltPadding{
+		eltCommon: eltCommon{xPath: eltPath{x}, yPath: eltPath{y}},
+		side:      side,
+	}
+	switch side {
+	case 't':
+		elt.yPath = eltPath{y, -2}
+	case 'r':
+		elt.xPath = eltPath{x, 2}
+	case 'b':
+		elt.yPath = eltPath{y, 2}
+	case 'l':
+		elt.xPath = eltPath{x, -2}
+	default:
+		panic("bad side")
+	}
+	return elt
+}
+
+func (e *eltPadding) SizeHint() (w, h float64, flexw, flexh bool) {
+	const padding = 4 // TODO: Theme.
+
+	switch e.side {
+	case 't', 'b':
+		return 0, padding, true, false
+	case 'l', 'r':
+		return padding, 0, false, true
+	default:
+		panic("bad side")
+	}
+}
+
+func addSubplotLabels(elts []plotElt) []plotElt {
 	// Find the regions covered by each subplot band.
 	type region struct{ x1, x2, y1, y2, level int }
 	update := func(r *region, s *subplot, level int) {
@@ -154,7 +282,8 @@ func addSubplotLabels(elts []*plotElt) []*plotElt {
 	vBands := make(map[*subplotBand]region)
 	hBands := make(map[*subplotBand]region)
 	for _, elt := range elts {
-		if elt.typ != eltSubplot {
+		elt, ok := elt.(*eltSubplot)
+		if !ok {
 			continue
 		}
 		s := elt.subplot
@@ -193,73 +322,40 @@ func addSubplotLabels(elts []*plotElt) []*plotElt {
 	// We could either abandon the grid and instead use a
 	// hierarchy of left-of/right-of/above/below relations, or we
 	// could make facets produce a total grid.
-	var prev *plotElt
-	sort.Sort(plotEltSorter{elts, 'x'})
-	for _, elt := range elts {
-		if elt.typ != eltSubplot {
-			continue
-		}
+	var prev *eltSubplot
+	sorter := newSubplotSorter(elts, 'x')
+	sort.Sort(sorter)
+	for _, elt := range sorter.elts {
 		if prev == nil || prev.subplot.y != elt.subplot.y || !eqScales(prev, elt, "y") {
 			// Show Y axis ticks.
-			elts = append(elts, &plotElt{
-				typ:      eltYTicks,
-				xPath:    eltPath{elt.subplot.x, -1},
-				yPath:    eltPath{elt.subplot.y},
-				ticksFor: elt,
-				layout:   new(layout.Leaf).SetFlex(false, true),
-			})
-			elt.yticks = elts[len(elts)-1]
+			elts = append(elts, newEltTicks('y', elt))
 		}
 		prev = elt
 	}
-	sort.Sort(plotEltSorter{elts, 'y'})
+	sorter.dir = 'y'
+	sort.Sort(sorter)
 	prev = nil
-	for _, elt := range elts {
-		if elt.typ != eltSubplot {
-			continue
-		}
+	for _, elt := range sorter.elts {
 		if prev == nil || prev.subplot.x != elt.subplot.x || !eqScales(prev, elt, "x") {
 			// Show X axis ticks.
-			elts = append(elts, &plotElt{
-				typ:      eltXTicks,
-				xPath:    eltPath{elt.subplot.x},
-				yPath:    eltPath{elt.subplot.y, 1},
-				ticksFor: elt,
-				layout:   new(layout.Leaf).SetFlex(true, false),
-			})
-			elt.xticks = elts[len(elts)-1]
+			elts = append(elts, newEltTicks('x', elt))
 		}
 		prev = elt
 	}
 
 	// Create labels.
-	textLeading := measureString(fontSize, "").leading
 	for vBand, r := range vBands {
-		elts = append(elts, &plotElt{
-			typ:    eltHLabel,
-			label:  vBand.label,
-			xPath:  eltPath{r.x1},
-			yPath:  eltPath{r.y1, -3, -r.level},
-			x2Path: eltPath{r.x2},
-			layout: new(layout.Leaf).SetMin(0, textLeading*facetLabelHeight).SetFlex(true, false),
-		})
+		elts = append(elts, newEltLabel('t', vBand.label, r.x1, r.y1, r.x2, r.y2, r.level))
 	}
 	for hBand, r := range hBands {
-		elts = append(elts, &plotElt{
-			typ:    eltVLabel,
-			label:  hBand.label,
-			xPath:  eltPath{r.x2, 3, r.level},
-			yPath:  eltPath{r.y1},
-			y2Path: eltPath{r.y2},
-			layout: new(layout.Leaf).SetMin(textLeading*facetLabelHeight, 0).SetFlex(false, true),
-		})
+		elts = append(elts, newEltLabel('r', hBand.label, r.x1, r.y1, r.x2, r.y2, r.level))
 	}
 	return elts
 }
 
-// plotEltSorter sorts subplot plotElts by subplot (x, y) position.
-type plotEltSorter struct {
-	elts []*plotElt
+// subplotSorter sorts eltSubplots by subplot (x, y) position.
+type subplotSorter struct {
+	elts []*eltSubplot
 
 	// dir indicates primary sorting direction: 'x' means to sort
 	// left-to-right, top-to-bottom; 'y' means to sort
@@ -267,19 +363,22 @@ type plotEltSorter struct {
 	dir rune
 }
 
-func (s plotEltSorter) Len() int {
+func newSubplotSorter(elts []plotElt, dir rune) *subplotSorter {
+	selts := []*eltSubplot{}
+	for _, elt := range elts {
+		if s, ok := elt.(*eltSubplot); ok {
+			selts = append(selts, s)
+		}
+	}
+	return &subplotSorter{selts, dir}
+}
+
+func (s subplotSorter) Len() int {
 	return len(s.elts)
 }
 
-func (s plotEltSorter) Less(i, j int) bool {
+func (s subplotSorter) Less(i, j int) bool {
 	a, b := s.elts[i], s.elts[j]
-	// Put non-subplots first; consider them equal.
-	if a.typ != b.typ {
-		return b.typ == eltSubplot
-	} else if a.typ != eltSubplot {
-		return false
-	}
-
 	if s.dir == 'x' {
 		if a.subplot.y != b.subplot.y {
 			return a.subplot.y < b.subplot.y
@@ -293,11 +392,11 @@ func (s plotEltSorter) Less(i, j int) bool {
 	}
 }
 
-func (s plotEltSorter) Swap(i, j int) {
+func (s subplotSorter) Swap(i, j int) {
 	s.elts[i], s.elts[j] = s.elts[j], s.elts[i]
 }
 
-func eqScales(a, b *plotElt, aes string) bool {
+func eqScales(a, b *eltSubplot, aes string) bool {
 	sa, sb := a.scales[aes], b.scales[aes]
 	if len(sa) != len(sb) {
 		return false
@@ -368,36 +467,35 @@ func (s eltPaths) find(p eltPath) int {
 //
 // layoutPlotElts flattens the X and Y paths of elts into simple
 // coordinate indexes and constructs a layout.Grid.
-func layoutPlotElts(elts []*plotElt) layout.Element {
-	const padding = 4 // TODO: Theme.
-
+func layoutPlotElts(elts []plotElt) layout.Element {
 	// Add padding elements to each subplot.
 	//
 	// TODO: Should there be padding between labels and the plot?
 	for _, elt := range elts {
-		if elt.typ != eltSubplot {
+		elt, ok := elt.(*eltSubplot)
+		if !ok {
 			continue
 		}
 		x, y := elt.xPath[0], elt.yPath[0]
 		elts = append(elts,
-			// Top.
-			&plotElt{typ: eltPadding, xPath: eltPath{x}, yPath: eltPath{y, -2}, layout: new(layout.Leaf).SetMin(0, padding).SetFlex(true, false)},
-			// Right.
-			&plotElt{typ: eltPadding, xPath: eltPath{x, 2}, yPath: eltPath{y}, layout: new(layout.Leaf).SetMin(padding, 0).SetFlex(false, true)},
-			// Bottom.
-			&plotElt{typ: eltPadding, xPath: eltPath{x}, yPath: eltPath{y, 2}, layout: new(layout.Leaf).SetMin(0, padding).SetFlex(true, false)},
-			// Left.
-			&plotElt{typ: eltPadding, xPath: eltPath{x, -2}, yPath: eltPath{y}, layout: new(layout.Leaf).SetMin(padding, 0).SetFlex(false, true)},
+			newEltPadding('t', x, y),
+			newEltPadding('r', x, y),
+			newEltPadding('b', x, y),
+			newEltPadding('l', x, y),
 		)
 	}
 
 	// Construct the global element grid from coordinate paths by
 	// sorting the sets of X paths and Y paths to each leaf and
 	// computing a global (x,y) for each leaf from these orders.
-	dir := func(get func(*plotElt) (p, p2 eltPath, pos, span *int)) {
+	type eltPos struct {
+		x, y, xSpan, ySpan int
+	}
+	flat := map[plotElt]eltPos{}
+	dir := func(get func(plotElt) (p, p2 eltPath), set func(p *eltPos, pos, span int)) {
 		var paths eltPaths
 		for _, elt := range elts {
-			p, p2, _, _ := get(elt)
+			p, p2 := get(elt)
 			paths = append(paths, p)
 			if p2 != nil {
 				paths = append(paths, p2)
@@ -406,26 +504,33 @@ func layoutPlotElts(elts []*plotElt) layout.Element {
 		sort.Sort(paths)
 		paths = paths.nub()
 		for _, elt := range elts {
-			p, p2, pos, span := get(elt)
-			*pos = paths.find(p)
-			if p2 == nil {
-				*span = 1
-			} else {
-				*span = paths.find(p2) - *pos + 1
+			p, p2 := get(elt)
+			pos, span := paths.find(p), 1
+			if p2 != nil {
+				span = paths.find(p2) - pos + 1
 			}
+			eltPos := flat[elt]
+			set(&eltPos, pos, span)
+			flat[elt] = eltPos
 		}
 	}
-	dir(func(e *plotElt) (p, p2 eltPath, pos, span *int) {
-		return e.xPath, e.x2Path, &e.x, &e.xSpan
+	dir(func(e plotElt) (p, p2 eltPath) {
+		p, _, p2, _ = e.paths()
+		return
+	}, func(p *eltPos, pos, span int) {
+		p.x, p.xSpan = pos, span
 	})
-	dir(func(e *plotElt) (p, p2 eltPath, pos, span *int) {
-		return e.yPath, e.y2Path, &e.y, &e.ySpan
+	dir(func(e plotElt) (p, p2 eltPath) {
+		_, p, _, p2 = e.paths()
+		return
+	}, func(p *eltPos, pos, span int) {
+		p.y, p.ySpan = pos, span
 	})
 
 	// Construct the grid layout.
 	l := new(layout.Grid)
-	for _, si := range elts {
-		l.Add(si.layout, si.x, si.y, si.xSpan, si.ySpan)
+	for elt, pos := range flat {
+		l.Add(elt, pos.x, pos.y, pos.xSpan, pos.ySpan)
 	}
 	return l
 }
