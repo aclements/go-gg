@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/aclements/go-gg/generic"
 	"github.com/aclements/go-gg/table"
 	"github.com/ajstarks/svgo"
 )
@@ -48,7 +49,7 @@ var plotMargins = func(w, h float64) (t, r, b, l float64) {
 }
 
 func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
-	// TODO: Axis labels, legend, title.
+	// TODO: Legend, title.
 
 	// TODO: Check if the same scaler is used for multiple
 	// aesthetics with conflicting rangers. Alternatively, if we
@@ -114,8 +115,17 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 		ss[sk.scale] = true
 	}
 
-	// Compute plot element layout.
+	// Add ticks and facet labels.
 	plotElts = addSubplotLabels(plotElts)
+
+	// Add axis labels.
+	//
+	// TODO: Allow user to override these.
+	xlabel := strings.Join(generic.Nub(p.axisLabels["x"]).([]string), "\n")
+	ylabel := strings.Join(generic.Nub(p.axisLabels["y"]).([]string), "\n")
+	plotElts = addAxisLabels(plotElts, xlabel, ylabel)
+
+	// Compute plot element layout.
 	layout := layoutPlotElts(plotElts)
 
 	// Perform layout. There's a cyclic dependency involving tick
@@ -315,15 +325,18 @@ func (e *eltTicks) render(svg *svg.SVG) {
 }
 
 func (e *eltLabel) render(svg *svg.SVG) {
-	// TODO: Theme.
-	//
 	// TODO: Clip to label region.
 	x, y, w, h := e.Layout()
-	svg.Rect(int(x), int(y), int(w), int(h), "fill: #ccc")
+	if e.fill != "none" {
+		svg.Rect(int(x), int(y), int(w), int(h), "fill: "+e.fill)
+	}
 	// Vertical centering is very poorly
 	// supported. dy is the best chance.
 	style := `text-anchor="middle" dy=".3em"`
-	if e.side == 'r' {
+	switch e.side {
+	case 'l':
+		style += fmt.Sprintf(` transform="rotate(-90 %d %d)"`, int(x+w/2), int(y+h/2))
+	case 'r':
 		style += fmt.Sprintf(` transform="rotate(90 %d %d)"`, int(x+w/2), int(y+h/2))
 	}
 	svg.Text(int(x+w/2), int(y+h/2), e.label, style)

@@ -178,14 +178,16 @@ type eltLabel struct {
 	eltCommon
 	layout.Leaf
 
-	side  rune // 't' or 'r'
+	side  rune // 't', 'b', 'l', 'r'
 	label string
+	fill  string
 }
 
-func newEltLabel(side rune, label string, x1, y1, x2, y2 int, level int) *eltLabel {
+func newEltLabelFacet(side rune, label string, x1, y1, x2, y2 int, level int) *eltLabel {
 	elt := &eltLabel{
 		side:  side,
 		label: label,
+		fill:  "#ccc", // TODO: Theme.
 	}
 	switch side {
 	case 't':
@@ -206,14 +208,32 @@ func newEltLabel(side rune, label string, x1, y1, x2, y2 int, level int) *eltLab
 	return elt
 }
 
+func newEltLabelAxis(side rune, label string, x, y, span int) *eltLabel {
+	elt := &eltLabel{
+		eltCommon: eltCommon{xPath: eltPath{x}, yPath: eltPath{y}},
+		side:      side,
+		label:     label,
+		fill:      "none",
+	}
+	switch side {
+	case 'b':
+		elt.x2Path = eltPath{x + span}
+	case 'l':
+		elt.y2Path = eltPath{y + span}
+	default:
+		panic("bad side")
+	}
+	return elt
+}
+
 func (e *eltLabel) SizeHint() (w, h float64, flexw, flexh bool) {
 	// TODO: We actually want the height of the text, which could
 	// be N*leading if there are multiple lines.
 	dim := measureString(fontSize, e.label).leading * facetLabelHeight
 	switch e.side {
-	case 't':
+	case 't', 'b':
 		return 0, dim, true, false
-	case 'r':
+	case 'l', 'r':
 		return dim, 0, false, true
 	default:
 		panic("bad side")
@@ -262,25 +282,8 @@ func (e *eltPadding) SizeHint() (w, h float64, flexw, flexh bool) {
 
 func addSubplotLabels(elts []plotElt) []plotElt {
 	// Find the regions covered by each subplot band.
-	type region struct{ x1, x2, y1, y2, level int }
-	update := func(r *region, s *subplot, level int) {
-		if s.x < r.x1 {
-			r.x1 = s.x
-		} else if s.x > r.x2 {
-			r.x2 = s.x
-		}
-		if s.y < r.y1 {
-			r.y1 = s.y
-		} else if s.y > r.y2 {
-			r.y2 = s.y
-		}
-		if level > r.level {
-			r.level = level
-		}
-	}
-
-	vBands := make(map[*subplotBand]region)
-	hBands := make(map[*subplotBand]region)
+	vBands := make(map[*subplotBand]subplotRegion)
+	hBands := make(map[*subplotBand]subplotRegion)
 	for _, elt := range elts {
 		elt, ok := elt.(*eltSubplot)
 		if !ok {
@@ -290,24 +293,16 @@ func addSubplotLabels(elts []plotElt) []plotElt {
 
 		level := 0
 		for vBand := s.vBand; vBand != nil; vBand = vBand.parent {
-			r, ok := vBands[vBand]
-			if !ok {
-				r = region{s.x, s.x, s.y, s.y, level}
-			} else {
-				update(&r, s, level)
-			}
+			r := vBands[vBand]
+			r.update(s, level)
 			vBands[vBand] = r
 			level++
 		}
 
 		level = 0
 		for hBand := s.hBand; hBand != nil; hBand = hBand.parent {
-			r, ok := hBands[hBand]
-			if !ok {
-				r = region{s.x, s.x, s.y, s.y, level}
-			} else {
-				update(&r, s, level)
-			}
+			r := hBands[hBand]
+			r.update(s, level)
 			hBands[hBand] = r
 			level++
 		}
@@ -345,12 +340,59 @@ func addSubplotLabels(elts []plotElt) []plotElt {
 
 	// Create labels.
 	for vBand, r := range vBands {
-		elts = append(elts, newEltLabel('t', vBand.label, r.x1, r.y1, r.x2, r.y2, r.level))
+		elts = append(elts, newEltLabelFacet('t', vBand.label, r.x1, r.y1, r.x2, r.y2, r.level))
 	}
 	for hBand, r := range hBands {
-		elts = append(elts, newEltLabel('r', hBand.label, r.x1, r.y1, r.x2, r.y2, r.level))
+		elts = append(elts, newEltLabelFacet('r', hBand.label, r.x1, r.y1, r.x2, r.y2, r.level))
 	}
 	return elts
+}
+
+func addAxisLabels(elts []plotElt, xlabel, ylabel string) []plotElt {
+	// Find the region covered by subplots.
+	var r subplotRegion
+	for _, elt := range elts {
+		elt, ok := elt.(*eltSubplot)
+		if !ok {
+			continue
+		}
+		r.update(elt.subplot, 0)
+	}
+	if !r.valid {
+		return elts
+	}
+
+	// Add labels.
+	elts = append(elts,
+		newEltLabelAxis('b', xlabel, r.x1, r.y2+1, r.x2-r.x1),
+		newEltLabelAxis('l', ylabel, r.x1-1, r.y1, r.y2-r.y1))
+	return elts
+}
+
+type subplotRegion struct {
+	valid                 bool
+	x1, x2, y1, y2, level int
+}
+
+func (r *subplotRegion) update(s *subplot, level int) {
+	if !r.valid {
+		r.x1, r.x2, r.y1, r.y2, r.level = s.x, s.x, s.y, s.y, level
+		r.valid = true
+		return
+	}
+	if s.x < r.x1 {
+		r.x1 = s.x
+	} else if s.x > r.x2 {
+		r.x2 = s.x
+	}
+	if s.y < r.y1 {
+		r.y1 = s.y
+	} else if s.y > r.y2 {
+		r.y2 = s.y
+	}
+	if level > r.level {
+		r.level = level
+	}
 }
 
 // subplotSorter sorts eltSubplots by subplot (x, y) position.

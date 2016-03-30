@@ -29,6 +29,8 @@ type Plot struct {
 	scaledData map[scaledDataKey]*scaledData
 	scaleSet   map[scaleKey]bool
 	marks      []plotMark
+
+	axisLabels map[string][]string
 }
 
 func NewPlot(data table.Grouping) *Plot {
@@ -39,6 +41,7 @@ func NewPlot(data table.Grouping) *Plot {
 		scales:     make(map[string]scalerTree),
 		scaledData: make(map[scaledDataKey]*scaledData),
 		scaleSet:   make(map[scaleKey]bool),
+		axisLabels: make(map[string][]string),
 	}
 	return p
 }
@@ -202,6 +205,11 @@ func (p *Plot) use(aes string, col string) *scaledData {
 		}
 
 		p.scaledData[scaledDataKey{p.Data(), col}] = sd
+	}
+
+	// Update axis labels.
+	if aes == "x" || aes == "y" {
+		p.axisLabels[aes] = append(p.axisLabels[aes], col)
 	}
 
 	return sd
