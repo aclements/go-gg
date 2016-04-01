@@ -59,14 +59,6 @@ func (s LeastSquares) F(g table.Grouping) table.Grouping {
 	if s.Degree <= 0 {
 		s.Degree = 1
 	}
-	if s.Degree == 1 && s.N == 0 {
-		// No point in evaluating a line at a ton of points.
-		//
-		// TODO: If we're on a non-linear scale, we *do* want
-		// lots of intermediate points (unless LayerPaths
-		// curves its connections).
-		s.N = 2
-	}
 
 	evals := evalPoints(g, s.X, s.N, s.Widen, s.SplitGroups)
 
