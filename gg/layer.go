@@ -9,10 +9,7 @@ package gg
 type LayerLines LayerPaths
 
 func (l LayerLines) Apply(p *Plot) {
-	defer p.Save().Restore()
-	// TODO: This doesn't fill in the default correctly if X is "".
-	p = p.SortBy(l.X)
-	LayerPaths(l).Apply(p)
+	LayerPaths(l).apply(p, true)
 }
 
 //go:generate stringer -type StepMode
@@ -68,8 +65,8 @@ func (l LayerSteps) Apply(p *Plot) {
 	}, p.Data().Tables()})
 }
 
-// LayerPaths connects successive data points in each group with a
-// path and/or a filled polygon.
+// LayerPaths groups by Color and Fill, and then connects successive
+// data points in each group with a path and/or a filled polygon.
 type LayerPaths struct {
 	// X and Y name columns that define the location of each point
 	// on the path. If these are empty, they default to the first
@@ -115,14 +112,24 @@ func (l *LayerPaths) resolveDefaults() {
 }
 
 func (l LayerPaths) Apply(p *Plot) {
+	l.apply(p, false)
+}
+
+func (l LayerPaths) apply(p *Plot, sort bool) {
 	l.resolveDefaults()
-	defer p.Save().Restore()
 	if l.Color != "" {
 		p.GroupBy(l.Color)
 	}
 	if l.Fill != "" {
 		p.GroupBy(l.Fill)
 	}
+	if sort {
+		defer p.Save().Restore()
+		// TODO: This doesn't understand @0, so this fails if
+		// X is defaulted.
+		p = p.SortBy(l.X)
+	}
+
 	p.marks = append(p.marks, plotMark{&markPath{
 		p.use("x", l.X),
 		p.use("y", l.Y),
