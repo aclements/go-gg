@@ -79,6 +79,8 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 
 	// TODO: Automatic aspect ratio by averaging slopes.
 
+	// TODO: Custom tick breaks.
+
 	// Find all of the subplots and subdivide the marks.
 	//
 	// TODO: If a mark was done in a parent subplot, broadcast it
