@@ -19,7 +19,10 @@ import (
 //
 // Continuous -> Discrete? Can always discretize the input either in
 // value order or in index order. In this case the transform (linear,
-// log, etc) doesn't matter as long as it's order-preserving.
+// log, etc) doesn't matter as long as it's order-preserving. OTOH, a
+// continuous input scale can be asked to map *any* value of its input
+// type, but if I do this I can only map values that were trained.
+// That suggests that I have to just bin the range to do this mapping.
 //
 // Discrete -> Interpolatable? Pick evenly spaced values on [0,1].
 //
@@ -65,19 +68,8 @@ type Scaler interface {
 	ExpandDomain(table.Slice)
 
 	// Ranger sets this Scaler's output range if r is non-nil and
-	// returns the previous continuous range. This makes the range
-	// continuous and overrides any set discrete range.
+	// returns the previous range.
 	Ranger(r Ranger) Ranger
-
-	// DiscreteRange sets this Scaler's output range if r is
-	// non-nil and returns the previous discrete range. r must be
-	// a sequence (slice, array, or pointer to array). This makes
-	// the range discrete and overrides any set continuous range.
-	//
-	// XXX This interface makes it annoying to test if a Scaler
-	// has a range because you have to check both Ranger and
-	// DiscreteRange.
-	DiscreteRange(r interface{}) interface{}
 
 	// XXX Should RangeType be implied by the aesthetic?
 	//
@@ -186,10 +178,6 @@ func (s *defaultScale) Ranger(r Ranger) Ranger {
 	return s.ensure().Ranger(r)
 }
 
-func (s *defaultScale) DiscreteRange(r interface{}) interface{} {
-	return s.ensure().DiscreteRange(r)
-}
-
 func (s *defaultScale) RangeType() reflect.Type {
 	return s.ensure().RangeType()
 }
@@ -262,9 +250,8 @@ func (s *identityScale) RangeType() reflect.Type {
 	return s.rangeType
 }
 
-func (s *identityScale) Ranger(r Ranger) Ranger                  { return nil }
-func (s *identityScale) DiscreteRange(r interface{}) interface{} { return nil }
-func (s *identityScale) Map(x interface{}) interface{}           { return x }
+func (s *identityScale) Ranger(r Ranger) Ranger        { return nil }
+func (s *identityScale) Map(x interface{}) interface{} { return x }
 
 func (s *identityScale) Ticks(n int) (major, minor table.Slice, labels []string) {
 	return nil, nil, nil
@@ -354,12 +341,7 @@ func (s *linearScale) Ranger(r Ranger) Ranger {
 	return old
 }
 
-func (s *linearScale) DiscreteRange(r interface{}) interface{} {
-	panic("not implemented")
-}
-
 func (s *linearScale) RangeType() reflect.Type {
-	// XXX Discrete ranges
 	return s.r.RangeType()
 }
 
@@ -367,7 +349,25 @@ func (s *linearScale) Map(x interface{}) interface{} {
 	ls := s.get()
 	f64 := reflect.TypeOf(float64(0))
 	v := reflect.ValueOf(x).Convert(f64).Float()
-	return s.r.Map(ls.Map(v))
+	scaled := ls.Map(v)
+	switch r := s.r.(type) {
+	case ContinuousRanger:
+		return r.Map(scaled)
+
+	case DiscreteRanger:
+		_, levels := r.Levels()
+		// Bin the scaled value into 'levels' bins.
+		level := int(scaled * float64(levels))
+		if level < 0 {
+			level = 0
+		} else if level >= levels {
+			level = levels - 1
+		}
+		return r.Map(level, levels)
+
+	default:
+		panic("Ranger must be a ContinuousRanger or DiscreteRanger")
+	}
 }
 
 func (s *linearScale) Ticks(n int) (major, minor table.Slice, labels []string) {
@@ -394,13 +394,26 @@ func (s *linearScale) CloneScaler() Scaler {
 	return &s2
 }
 
+// XXX
+//
+// A Ranger must be either a ContinuousRanger or a DiscreteRanger.
 type Ranger interface {
-	Map(x float64) (y interface{})
-	Unmap(y interface{}) (x float64)
 	RangeType() reflect.Type
 }
 
-func NewFloatRanger(lo, hi float64) Ranger {
+type ContinuousRanger interface {
+	Ranger
+	Map(x float64) (y interface{})
+	Unmap(y interface{}) (x float64)
+}
+
+type DiscreteRanger interface {
+	Ranger
+	Levels() (min, max int)
+	Map(i, j int) interface{}
+}
+
+func NewFloatRanger(lo, hi float64) ContinuousRanger {
 	return &floatRanger{lo, hi - lo}
 }
 
@@ -412,6 +425,10 @@ func (r *floatRanger) String() string {
 	return fmt.Sprintf("[%g,%g]", r.lo, r.lo+r.w)
 }
 
+func (r *floatRanger) RangeType() reflect.Type {
+	return float64Type
+}
+
 func (r *floatRanger) Map(x float64) interface{} {
 	return x*r.w + r.lo
 }
@@ -420,8 +437,33 @@ func (r *floatRanger) Unmap(y interface{}) float64 {
 	return (y.(float64) - r.lo) / r.w
 }
 
-func (r *floatRanger) RangeType() reflect.Type {
-	return float64Type
+func NewColorRanger(palette []color.Color) DiscreteRanger {
+	// TODO: Support continuous palettes.
+	//
+	// TODO: Support discrete palettes that vary depending on the
+	// number of levels.
+	return &colorRanger{palette}
+}
+
+type colorRanger struct {
+	palette []color.Color
+}
+
+func (r *colorRanger) RangeType() reflect.Type {
+	return colorType
+}
+
+func (r *colorRanger) Levels() (min, max int) {
+	return len(r.palette), len(r.palette)
+}
+
+func (r *colorRanger) Map(i, j int) interface{} {
+	if i < 0 {
+		i = 0
+	} else if i >= len(r.palette) {
+		i = len(r.palette) - 1
+	}
+	return r.palette[i]
 }
 
 // mapMany applies scaler.Map to all of the values in seq and returns
