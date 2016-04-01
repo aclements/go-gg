@@ -30,3 +30,16 @@ func Cycle(s Slice, length int) Slice {
 
 	return out.Interface()
 }
+
+// Repeat returns a slice consisting of length copies of v.
+func Repeat(v interface{}, length int) Slice {
+	if length < 0 {
+		length = 0
+	}
+	rv := reflect.ValueOf(v)
+	out := reflect.MakeSlice(reflect.SliceOf(rv.Type()), length, length)
+	for i := 0; i < length; i++ {
+		out.Index(i).Set(rv)
+	}
+	return out.Interface()
+}
