@@ -175,6 +175,9 @@ func (s *defaultScale) ensure() Scaler {
 }
 
 func (s *defaultScale) Ranger(r Ranger) Ranger {
+	// TODO: It would be nice if a package user could grab a scale
+	// and set a ranger on it without necessarily defaulting it to
+	// a linear scale.
 	return s.ensure().Ranger(r)
 }
 
@@ -223,8 +226,7 @@ func DefaultScale(seq table.Slice) (Scaler, error) {
 		return NewLinearScaler(), nil
 
 	case generic.CanOrderR(rtk):
-		// TODO: Ordinal scale
-		panic("not implemented")
+		return NewOrdinalScale(), nil
 
 	case rt.Comparable():
 		// TODO: Nominal scale
@@ -415,6 +417,102 @@ done:
 func (s *linearScale) CloneScaler() Scaler {
 	s2 := *s
 	return &s2
+}
+
+func NewOrdinalScale() Scaler {
+	return &ordinalScale{}
+}
+
+type ordinalScale struct {
+	allData []generic.Slice
+	r       Ranger
+	ordered table.Slice
+	index   map[interface{}]int
+}
+
+func (s *ordinalScale) ExpandDomain(v table.Slice) {
+	// TODO: Type-check?
+	s.allData = append(s.allData, generic.Slice(v))
+	s.ordered, s.index = nil, nil
+}
+
+func (s *ordinalScale) Ranger(r Ranger) Ranger {
+	old := s.r
+	if r != nil {
+		s.r = r
+	}
+	return old
+}
+
+func (s *ordinalScale) RangeType() reflect.Type {
+	return s.r.RangeType()
+}
+
+func (s *ordinalScale) makeIndex() {
+	if s.index != nil {
+		return
+	}
+
+	// Compute ordered data index and cache.
+	s.ordered = generic.NubAppend(s.allData...)
+	generic.Sort(s.ordered)
+	ov := reflect.ValueOf(s.ordered)
+	s.index = make(map[interface{}]int, ov.Len())
+	for i, len := 0, ov.Len(); i < len; i++ {
+		s.index[ov.Index(i).Interface()] = i
+	}
+}
+
+func (s *ordinalScale) Map(x interface{}) interface{} {
+	s.makeIndex()
+	i := s.index[x]
+	switch r := s.r.(type) {
+	case ContinuousRanger:
+		// Map i to the "middle" of the ith equal j-way
+		// subdivision of [0, 1].
+		j := len(s.index)
+		x := (float64(i) + 0.5) / float64(j)
+		return r.Map(x)
+
+	case DiscreteRanger:
+		minLevels, maxLevels := r.Levels()
+		if len(s.index) <= minLevels {
+			return r.Map(i, minLevels)
+		} else if len(s.index) <= maxLevels {
+			return r.Map(i, len(s.index))
+		} else {
+			// TODO: Binning would also be a reasonable
+			// policy.
+			return r.Map(i%maxLevels, maxLevels)
+		}
+
+	default:
+		panic("Ranger must be a ContinuousRanger or DiscreteRanger")
+	}
+}
+
+func (s *ordinalScale) Ticks(n int) (major, minor table.Slice, labels []string) {
+	// TODO: Return *no* ticks and only labels. Can't current
+	// express this.
+
+	s.makeIndex()
+	labels = make([]string, len(s.index))
+	ov := reflect.ValueOf(s.ordered)
+	for i, len := 0, ov.Len(); i < len; i++ {
+		labels[i] = fmt.Sprintf("%v", ov.Index(i).Interface())
+	}
+	return s.ordered, nil, labels
+}
+
+func (s *ordinalScale) CloneScaler() Scaler {
+	ns := &ordinalScale{
+		allData: make([]generic.Slice, len(s.allData)),
+		r:       s.r,
+	}
+	for i, v := range s.allData {
+		ns.allData[i] = v
+	}
+	return s
 }
 
 // XXX

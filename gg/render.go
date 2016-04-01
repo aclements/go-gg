@@ -81,6 +81,9 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 
 	// TODO: Custom tick breaks.
 
+	// TODO: Make sure *all* Scalers have Rangers or the user will
+	// get confusing panics.
+
 	// Find all of the subplots and subdivide the marks.
 	//
 	// TODO: If a mark was done in a parent subplot, broadcast it
