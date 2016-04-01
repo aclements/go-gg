@@ -13,7 +13,8 @@ import (
 // ECDF constructs an empirical CDF. xcol names the column in g for
 // data points. wcol may be "", in which case all points are equally
 // weighted, or name a column in g for weights. ECDF returns a
-// table.Grouped with the same groups as g and with two columns:
+// table.Grouped with the same groups as g and with two columns in
+// addition to constant columns from the input::
 //
 // - Column xcol corresponds to the input data points.
 //
@@ -84,6 +85,7 @@ func ECDF(g table.Grouping, xcol, wcol string) table.Grouping {
 		xo[0], yo[0] = xs[0]-(margin*span), 0
 		xo, yo = append(xo, xs[len(xs)-1]+(margin*span)), append(yo, 1)
 
-		return new(table.Table).Add(xcol, xo).Add("cumulative density", yo)
+		nt := new(table.Table).Add(xcol, xo).Add("cumulative density", yo)
+		return preserveConsts(nt, t)
 	}, g)
 }

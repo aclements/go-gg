@@ -24,7 +24,8 @@ import (
 // X is the only required field. All other fields have reasonable
 // default zero values.
 //
-// The result of Density has two columns:
+// The result of Density has two columns in addition to constant
+// columns from the input:
 //
 // - Column X is the points at which the density estimate is sampled.
 //
@@ -171,6 +172,6 @@ func (d Density) F(g table.Grouping) table.Grouping {
 		} else {
 			nt = nt.Add(resp, vec.Map(kde.PDF, ss))
 		}
-		return nt
+		return preserveConsts(nt, t)
 	}, g)
 }

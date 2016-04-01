@@ -20,7 +20,8 @@ import (
 // X and Y are required. All other fields have reasonable default zero
 // values.
 //
-// The result of LOESS has two columns:
+// The result of LOESS has two columns in addition to constant columns
+// from the input:
 //
 // - Column X is the points at which the LOESS function is sampled.
 //
@@ -81,9 +82,15 @@ func (s LOESS) F(g table.Grouping) table.Grouping {
 		eval := evals[gid]
 
 		loess := fit.LOESS(xs, ys, s.Degree, s.Span)
-		return new(table.Table).Add(s.X, eval).Add(s.Y, vec.Map(loess, eval))
+		nt := new(table.Table).Add(s.X, eval).Add(s.Y, vec.Map(loess, eval))
+		return preserveConsts(nt, t)
 	}, g)
 }
+
+// TODO: Rethink evalPoints/preserveConsts. We probably want an
+// interface for "functions" in the mathematical sense that knows how
+// to evaluate them at reasonable points and bundle their results into
+// a table.
 
 func evalPoints(g table.Grouping, x string, n int, widen float64, splitGroups bool) map[table.GroupID][]float64 {
 	var xs []float64
@@ -145,4 +152,19 @@ func evalPoints(g table.Grouping, x string, n int, widen float64, splitGroups bo
 		res[gid] = eval
 	}
 	return res
+}
+
+// preserveConsts copies the constant columns from t into nt.
+func preserveConsts(nt, t *table.Table) *table.Table {
+	nnt := nt
+	for _, col := range t.Columns() {
+		if _, ok := nt.Const(col); ok || nt.Column(col) != nil {
+			// Don't overwrite existing columns in nt.
+			continue
+		}
+		if cv, ok := t.Const(col); ok {
+			nnt = nnt.AddConst(col, cv)
+		}
+	}
+	return nnt
 }

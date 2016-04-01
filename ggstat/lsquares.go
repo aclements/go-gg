@@ -17,7 +17,8 @@ import (
 // X and Y are required. All other fields have reasonable default zero
 // values.
 //
-// The result of LeastSquares has two columns:
+// The result of LeastSquares has two columns in addition to constant
+// columns from the input:
 //
 // - Column X is the points at which the fit function is sampled.
 //
@@ -37,6 +38,8 @@ type LeastSquares struct {
 	// to Widen times the span of the data. If Widen is 0, it is
 	// treated as 1.1 (that is, widen the domain by 10%, or 5% on
 	// the left and 5% on the right).
+	//
+	// TODO: Have a way to specify a specific range?
 	Widen float64
 
 	// SplitGroups indicates that each group in the table should
@@ -76,6 +79,7 @@ func (s LeastSquares) F(g table.Grouping) table.Grouping {
 		eval := evals[gid]
 
 		r := fit.PolynomialRegression(xs, ys, nil, s.Degree)
-		return new(table.Table).Add(s.X, eval).Add(s.Y, vec.Map(r.F, eval))
+		nt := new(table.Table).Add(s.X, eval).Add(s.Y, vec.Map(r.F, eval))
+		return preserveConsts(nt, t)
 	}, g)
 }
