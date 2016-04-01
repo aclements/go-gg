@@ -4,6 +4,8 @@
 
 package gg
 
+import "github.com/aclements/go-gg/table"
+
 // LayerLines is like LayerPaths, but connects data points in order by
 // the "x" property.
 type LayerLines LayerPaths
@@ -222,5 +224,45 @@ func (l LayerTiles) Apply(p *Plot) {
 		p.use("x", l.X),
 		p.use("y", l.Y),
 		p.use("fill", l.Fill),
+	}, p.Data().Tables()})
+}
+
+// LayerTags attaches text annotations to data points.
+//
+// TODO: Currently this makes one annotation per group. This should be
+// an option.
+type LayerTags struct {
+	// X and Y name columns that define the position each tag is
+	// attached to. If they are "", they default to the first and
+	// second columns, respectively.
+	X, Y string
+
+	// Label names the column that gives the text to put in the
+	// tag at X, Y. Label is required.
+	Label string
+}
+
+func (l *LayerTags) resolveDefaults() {
+	if l.X == "" {
+		l.X = "@0"
+	}
+	if l.Y == "" {
+		l.Y = "@1"
+	}
+}
+
+func (l LayerTags) Apply(p *Plot) {
+	l.resolveDefaults()
+	// TODO: I keep wanting an abstraction for a column across
+	// groups like this.
+	labels := make(map[table.GroupID]table.Slice)
+	for _, gid := range p.Data().Tables() {
+		labels[gid] = p.Data().Table(gid).MustColumn(l.Label)
+	}
+
+	p.marks = append(p.marks, plotMark{&markTags{
+		p.use("x", l.X),
+		p.use("y", l.Y),
+		labels,
 	}, p.Data().Tables()})
 }

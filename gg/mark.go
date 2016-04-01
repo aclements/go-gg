@@ -12,11 +12,13 @@ import (
 	"image/color"
 	"image/png"
 	"math"
+	"reflect"
 	"sort"
 	"strconv"
 
 	"github.com/aclements/go-gg/generic"
 	"github.com/aclements/go-gg/table"
+	"github.com/aclements/go-moremath/stats"
 	"github.com/ajstarks/svgo"
 )
 
@@ -237,6 +239,50 @@ func (m *markTiles) mark(env *renderEnv, canvas *svg.SVG) {
 	canvas.Image(round(xmin-xgap/2), round(ymin-ygap/2),
 		round(xmax-xmin+xgap), int(ymax-ymin+ygap),
 		uri.String(), `preserveAspectRatio="none" style="image-rendering:optimizeSpeed;image-rendering:-moz-crisp-edges;image-rendering:-webkit-optimize-contrast;image-rendering:pixelated"`)
+}
+
+type markTags struct {
+	x, y   *scaledData
+	labels map[table.GroupID]table.Slice
+}
+
+func (m *markTags) mark(env *renderEnv, canvas *svg.SVG) {
+	const offsetX float64 = -20
+	const offsetY float64 = -20
+	const padX float64 = 5
+
+	xs, ys := env.get(m.x).([]float64), env.get(m.y).([]float64)
+	if len(xs) == 0 {
+		return
+	}
+
+	// Find the point closest to the middle.
+	//
+	// TODO: Give the user control over this.
+	minx, maxx := stats.Bounds(xs)
+	avgx := (minx + maxx) / 2
+	midi, middelta := 0, math.Abs(xs[0]-avgx)
+	for i, x := range xs {
+		delta := math.Abs(x - avgx)
+		if delta < middelta {
+			midi, middelta = i, delta
+		}
+	}
+
+	// Get label.
+	label := fmt.Sprint(reflect.ValueOf(m.labels[env.gid]).Index(midi).Interface())
+
+	// Attach tag to this point.
+	//
+	// TODO: More user control.
+	//
+	// TODO: Make automatic positioning account for bounds of plot.
+	//
+	// TODO: Re-enable the tag box when I have decent text metrics.
+	//t := measureString(fontSize, label)
+	//canvas.Rect(int(xs[midi]+offsetX-t.width), int(ys[midi]+offsetY-0.75*t.leading), int(t.width), int(1.5*t.leading), `rx="4"`, `fill="white"`, `stroke="black"`)
+	canvas.Text(int(xs[midi]+offsetX-padX), int(ys[midi]+offsetY), label, `dy=".3em"`, `text-anchor="end"`)
+	canvas.Path(fmt.Sprintf("M%.6g %.6gc%.6g %.6g,%.6g %.6g,%.6g %.6g", xs[midi], ys[midi], 0.8*offsetX, 0.0, 0.2*offsetX, offsetY, offsetX, offsetY), `fill="none"`, `stroke="black"`, `stroke-dasharray="2, 3"`, `stroke-width="2"`)
 }
 
 // cssPaint returns a CSS fragment for setting CSS property prop to
