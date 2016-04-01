@@ -145,7 +145,11 @@ type LayerPoints struct {
 	// second columns, respectively.
 	X, Y string
 
-	// XXX Color, fill, size, shape
+	// Color names the column that defines the fill color of each
+	// point. If Color is "", it defaults to constant black.
+	Color string
+
+	// XXX fill vs stroke, size, shape
 }
 
 func (l *LayerPoints) resolveDefaults() {
@@ -162,6 +166,11 @@ func (l LayerPoints) Apply(p *Plot) {
 	p.marks = append(p.marks, plotMark{&markPoint{
 		p.use("x", l.X),
 		p.use("y", l.Y),
+		// TODO: It's actually the fill color, but I generally
+		// want it to match things that are stroke colors.
+		// Maybe I should have a "color" aesthetic for the
+		// "primary" color?
+		p.use("stroke", l.Color),
 	}, p.Data().Tables()})
 }
 

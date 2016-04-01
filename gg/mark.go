@@ -133,14 +133,17 @@ func drawPath(canvas *svg.SVG, xs, ys []float64, stroke color.Color, fill color.
 }
 
 type markPoint struct {
-	x, y *scaledData
+	x, y, color *scaledData
 }
 
 func (m *markPoint) mark(env *renderEnv, canvas *svg.SVG) {
 	xs, ys := env.get(m.x).([]float64), env.get(m.y).([]float64)
+	var colors []color.Color
+	generic.ConvertSlice(&colors, env.get(m.color))
 
 	for i := range xs {
-		canvas.Circle(int(xs[i]), int(ys[i]), 4)
+		style := cssPaint("fill", colors[i])
+		canvas.Circle(int(xs[i]), int(ys[i]), 4, style)
 	}
 }
 
