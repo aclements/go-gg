@@ -38,19 +38,16 @@ func (m *markPath) mark(env *renderEnv, canvas *svg.SVG) {
 	// especially if it's an identity scale? Maybe identity scales
 	// still need to coerce their results to the right type.
 	xs, ys := env.get(m.x).([]float64), env.get(m.y).([]float64)
-	// XXX Strokes may not be Gray16, but I don't have a good way
-	// to convert from a sequence of things that implement
-	// color.Color to a sequence of color.Color.
-	var strokes = []color.Gray16{color.Black}
+	var stroke color.Color = color.Black
 	if m.stroke != nil {
-		strokes = env.get(m.stroke).([]color.Gray16)
+		stroke = env.getFirst(m.stroke).(color.Color)
 	}
 	var fill color.Color = color.Transparent
 	if m.fill != nil {
 		fill = env.getFirst(m.fill).(color.Color)
 	}
 
-	drawPath(canvas, xs, ys, strokes, fill)
+	drawPath(canvas, xs, ys, stroke, fill)
 }
 
 type markSteps struct {
@@ -61,10 +58,9 @@ type markSteps struct {
 
 func (m *markSteps) mark(env *renderEnv, canvas *svg.SVG) {
 	xs, ys := env.get(m.x).([]float64), env.get(m.y).([]float64)
-	// XXX Strokes may not be Gray16.
-	var strokes = []color.Gray16{color.Black}
+	var stroke color.Color = color.Black
 	if m.stroke != nil {
-		strokes = env.get(m.stroke).([]color.Gray16)
+		stroke = env.getFirst(m.stroke).(color.Color)
 	}
 	var fill color.Color = color.Transparent
 	if m.fill != nil {
@@ -77,12 +73,6 @@ func (m *markSteps) mark(env *renderEnv, canvas *svg.SVG) {
 
 	// Create intermediate points.
 	xs2, ys2 := make([]float64, 2*len(xs)), make([]float64, 2*len(ys))
-	var strokes2 []color.Gray16
-	if m.stroke == nil {
-		strokes2 = strokes
-	} else {
-		strokes2 = make([]color.Gray16, 2*len(xs))
-	}
 	for i := range xs2 {
 		switch m.dir {
 		case StepHV, StepVH:
@@ -106,23 +96,17 @@ func (m *markSteps) mark(env *renderEnv, canvas *svg.SVG) {
 				xs2[i], ys2[i] = xs[i/2], (ys[p1]+ys[p2])/2
 			}
 		}
-		if m.stroke != nil {
-			strokes2[i] = strokes[i/2]
-		}
 	}
 	if m.dir == StepHV {
 		xs2 = xs2[1:]
 	} else if m.dir == StepVH {
 		ys2 = ys2[1:]
 	}
-	if m.stroke != nil {
-		strokes2 = strokes2[:len(strokes2)-1]
-	}
 
-	drawPath(canvas, xs2, ys2, strokes2, fill)
+	drawPath(canvas, xs2, ys2, stroke, fill)
 }
 
-func drawPath(canvas *svg.SVG, xs, ys []float64, strokes []color.Gray16, fill color.Color) {
+func drawPath(canvas *svg.SVG, xs, ys []float64, stroke color.Color, fill color.Color) {
 	switch len(xs) {
 	case 0:
 		return
@@ -133,16 +117,7 @@ func drawPath(canvas *svg.SVG, xs, ys []float64, strokes []color.Gray16, fill co
 		return
 	}
 
-	// Is the stroke constant?
-	stroke := strokes[0]
-	for _, s := range strokes {
-		if s != stroke {
-			Warning.Print("multi-color stroke not implemented")
-			break
-		}
-	}
-
-	// Constant stroke. Use one path.
+	// Build path.
 	path := []byte("M")
 	for i := range xs {
 		path = append(path, ' ')

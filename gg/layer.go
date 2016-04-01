@@ -76,18 +76,15 @@ type LayerPaths struct {
 	// and second columns, respectively.
 	X, Y string
 
-	// Color names a column that defines the color of each line
-	// segment in the path. Color defaults to black.
+	// Color names a column that defines the stroke color of each
+	// path. If Color is "", it defaults to constant black.
+	// Otherwise, the data is grouped by Color.
 	Color string
 
 	// Fill names a column that defines the fill color of each
-	// polygon with vertices at each data point. Only the fill
-	// value of the first point in each group is used. Fill
-	// defaults to transparent.
+	// path. If Fill is "", it defaults to none. Otherwise, the
+	// data is grouped by Fill.
 	Fill string
-
-	// TODO: Color and fill should split groups, rather than
-	// trying to say that a single path can have multiple colors.
 
 	// XXX Perhaps the theme should provide default values for
 	// things like "color". That would suggest we need to resolve
@@ -119,6 +116,13 @@ func (l *LayerPaths) resolveDefaults() {
 
 func (l LayerPaths) Apply(p *Plot) {
 	l.resolveDefaults()
+	defer p.Save().Restore()
+	if l.Color != "" {
+		p.GroupBy(l.Color)
+	}
+	if l.Fill != "" {
+		p.GroupBy(l.Fill)
+	}
 	p.marks = append(p.marks, plotMark{&markPath{
 		p.use("x", l.X),
 		p.use("y", l.Y),
