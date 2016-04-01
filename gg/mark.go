@@ -7,6 +7,7 @@ package gg
 import (
 	"bytes"
 	"encoding/base64"
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
@@ -277,13 +278,13 @@ func cssPaint(prop string, c color.Color) string {
 	}
 	r, g, b = r>>8, g>>8, b>>8
 
-	css := prop + ":#"
+	css := prop
 	if r>>4 == r&0xF && g>>4 == g&0xF && b>>4 == b&0xF {
 		// Use #rgb form.
-		css += strconv.FormatInt(int64(r>>4), 16) + strconv.FormatInt(int64(g>>4), 16) + strconv.FormatInt(int64(b>>4), 16)
+		css += fmt.Sprintf(":#%x%x%x", r>>4, g>>4, b>>4)
 	} else {
 		// Use #rrggbb form.
-		css += strconv.FormatInt(int64(r), 16) + strconv.FormatInt(int64(g), 16) + strconv.FormatInt(int64(b), 16)
+		css += fmt.Sprintf(":#%02x%02x%02x", r, g, b)
 	}
 
 	if a != 0xffff {
