@@ -147,6 +147,7 @@ func (p *Plot) GetScale(aes string, gid table.GroupID) Scaler {
 }
 
 type scaledDataKey struct {
+	aes  string
 	data table.Grouping
 	col  string
 }
@@ -175,7 +176,13 @@ func (p *Plot) use(aes string, col string) *scaledData {
 		}
 	}
 
-	sd := p.scaledData[scaledDataKey{p.Data(), col}]
+	// TODO: This is wrong. If the scale tree for aes changes,
+	// this may return a stale scaledData bound to the wrong
+	// scalers. If I got rid of scale trees, I could just put the
+	// scaler in the key. Or I could clean up the cache when the
+	// scale tree changes.
+
+	sd := p.scaledData[scaledDataKey{aes, p.Data(), col}]
 	if sd == nil {
 		// Construct the scaledData.
 		sd = &scaledData{
@@ -204,7 +211,7 @@ func (p *Plot) use(aes string, col string) *scaledData {
 			sd.seqs[gid] = scaledSeq{seq, scaler}
 		}
 
-		p.scaledData[scaledDataKey{p.Data(), col}] = sd
+		p.scaledData[scaledDataKey{aes, p.Data(), col}] = sd
 	}
 
 	// Update axis labels.
