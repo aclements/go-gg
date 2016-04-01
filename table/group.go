@@ -71,7 +71,8 @@ func (g GroupID) Label() interface{} {
 // GroupBy sub-divides all groups such that all of the rows in each
 // group have equal values for all of the named columns. The relative
 // order of rows with equal values for the named columns is
-// maintained.
+// maintained. Grouped-by columns become constant columns within each
+// group.
 func GroupBy(g Grouping, cols ...string) Grouping {
 	// TODO: This would generate much less garbage if we grouped
 	// all of cols in one pass.
@@ -83,10 +84,22 @@ func GroupBy(g Grouping, cols ...string) Grouping {
 	out := Grouping(new(Table))
 	for _, gid := range g.Tables() {
 		t := g.Table(gid)
+
+		if cv, ok := t.Const(cols[0]); ok {
+			// Grouping by a constant is trivial.
+			subgid := gid.Extend(cv)
+			out = out.AddTable(subgid, t)
+			continue
+		}
+
 		c := t.MustColumn(cols[0])
 
 		// Create an index on c.
-		subgroups := []GroupID{}
+		type subgroupInfo struct {
+			gid GroupID
+			val interface{}
+		}
+		subgroups := []subgroupInfo{}
 		gidkey := make(map[interface{}]GroupID)
 		rowsMap := make(map[GroupID][]int)
 		seq := reflect.ValueOf(c)
@@ -95,7 +108,7 @@ func GroupBy(g Grouping, cols ...string) Grouping {
 			subgid, ok := gidkey[x]
 			if !ok {
 				subgid = gid.Extend(x)
-				subgroups = append(subgroups, subgid)
+				subgroups = append(subgroups, subgroupInfo{subgid, x})
 				gidkey[x] = subgid
 				rowsMap[subgid] = []int{}
 			}
@@ -103,16 +116,22 @@ func GroupBy(g Grouping, cols ...string) Grouping {
 		}
 
 		// Split this group in all columns.
-		for _, subgid := range subgroups {
+		for _, subgroup := range subgroups {
 			// Construct this new group.
-			rows := rowsMap[subgid]
-			subgroup := new(Table)
+			rows := rowsMap[subgroup.gid]
+			subtable := new(Table)
 			for _, name := range t.Columns() {
+				if name == cols[0] {
+					// Promote the group-by column
+					// to a constant.
+					subtable = subtable.AddConst(name, subgroup.val)
+					continue
+				}
 				seq := t.Column(name)
 				seq = generic.MultiIndex(seq, rows)
-				subgroup = subgroup.Add(name, seq)
+				subtable = subtable.Add(name, seq)
 			}
-			out = out.AddTable(subgid, subgroup)
+			out = out.AddTable(subgroup.gid, subtable)
 		}
 	}
 

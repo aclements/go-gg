@@ -25,6 +25,9 @@ func SortBy(g Grouping, cols ...string) Grouping {
 		// Create sorters for each column.
 		sorters = sorters[:0]
 		for _, col := range cols {
+			if _, ok := t.Const(col); ok {
+				continue
+			}
 			seq := t.MustColumn(col)
 			sorter := generic.Sorter(seq)
 			if sort.IsSorted(sorter) {
