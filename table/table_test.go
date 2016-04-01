@@ -251,7 +251,7 @@ func TestAddTable(t *testing.T) {
 		t.Fatalf("tables should be %v; got %v", want, tab2.Tables())
 	}
 
-	shouldPanic(t, `\[\]int and \[\]float64 for column "x"`, func() {
+	shouldPanic(t, `int and float64 for column "x"`, func() {
 		tab0.AddTable(xgid, new(Table).Add("x", []float64{}))
 	})
 }

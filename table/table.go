@@ -29,8 +29,9 @@ import (
 )
 
 // A Table is an ordered two dimensional relation. It consists of a
-// set of named columns, where each column is a sequence of values of
-// a consistent type and all columns have the same length.
+// set of named columns. Each column is a sequence of values of a
+// consistent type or a constant value. All (non-constant) columns
+// have the same length.
 //
 // The zero value of Table is the "empty table": it has no rows and no
 // columns. Note that a Table may have one or more columns, but no
@@ -44,6 +45,7 @@ import (
 // an empty table and add columns to it using Add.
 type Table struct {
 	cols     map[string]Slice
+	consts   map[string]interface{}
 	colNames []string
 	len      int
 }
@@ -133,36 +135,74 @@ func (t *Table) Add(name string, data Slice) *Table {
 	// adding a bunch of columns and then using the final table
 	// would be O(N).
 
-	// Create the new table, removing any existing column with the
-	// same name.
-	nt := &Table{make(map[string]Slice), []string{}, t.len}
-	for _, name2 := range t.colNames {
-		if name != name2 {
-			nt.cols[name2] = t.cols[name2]
-			nt.colNames = append(nt.colNames, name2)
-		}
-	}
 	if data == nil {
 		// Remove the column.
-		if len(nt.cols) == 0 {
-			*nt = Table{}
+		if _, ok := t.cols[name]; !ok {
+			if _, ok := t.consts[name]; !ok {
+				// Nothing to remove.
+				return t
+			}
 		}
+		if len(t.colNames) == 1 {
+			// We're removing the only column. This is now
+			// an empty table.
+			return &Table{}
+		}
+	}
+
+	// Create the new table, removing any existing column with the
+	// same name.
+	nt := t.cloneSans(name)
+	if data == nil {
 		return nt
 	}
 
 	rv := reflectSlice(data)
 	dataLen := rv.Len()
 	if len(nt.cols) == 0 {
+		// First non-constant column.
 		nt.cols[name] = data
-		nt.colNames = append(nt.colNames, name)
 		nt.len = dataLen
 	} else if nt.len != dataLen {
 		panic(fmt.Sprintf("cannot add column %q with %d elements to table with %d rows", name, dataLen, nt.len))
 	} else {
 		nt.cols[name] = data
-		nt.colNames = append(nt.colNames, name)
 	}
+	nt.colNames = append(nt.colNames, name)
 
+	return nt
+}
+
+// AddConst returns a new Table with a new constant column whose value
+// is val. If Table t already has a column with this name, AddConst
+// first removes it.
+//
+// A constant column has the same value in every row of the Table. It
+// does not itself have an inherent length.
+func (t *Table) AddConst(name string, val interface{}) *Table {
+	// Clone and remove any existing column with the same name.
+	nt := t.cloneSans(name)
+	nt.consts[name] = val
+	nt.colNames = append(nt.colNames, name)
+	return nt
+}
+
+// cloneSans returns a clone of t without column name.
+func (t *Table) cloneSans(name string) *Table {
+	// Create the new table, removing any existing column with the
+	// same name.
+	nt := &Table{make(map[string]Slice), make(map[string]interface{}), []string{}, t.len}
+	for _, name2 := range t.colNames {
+		if name != name2 {
+			if c, ok := t.cols[name2]; ok {
+				nt.cols[name2] = c
+			}
+			if cv, ok := t.consts[name2]; ok {
+				nt.consts[name2] = cv
+			}
+			nt.colNames = append(nt.colNames, name2)
+		}
+	}
 	return nt
 }
 
@@ -178,9 +218,24 @@ func (t *Table) Columns() []string {
 }
 
 // Column returns the slice of data in column name of Table t, or nil
-// if there is no such column.
+// if there is no such column. If name is a constant column, this
+// returns a slice with the constant value repeated to the length of
+// the Table.
 func (t *Table) Column(name string) Slice {
-	return t.cols[name]
+	if c, ok := t.cols[name]; ok {
+		// It's a regular column or a constant column with a
+		// cached expansion.
+		return c
+	}
+
+	if cv, ok := t.consts[name]; ok {
+		// Expand the constant column and cache the result.
+		expanded := generic.Repeat(cv, t.len)
+		t.cols[name] = expanded
+		return expanded
+	}
+
+	return nil
 }
 
 // MustColumn is like Column, but panics if there is no such column.
@@ -191,10 +246,24 @@ func (t *Table) MustColumn(name string) Slice {
 	panic(fmt.Sprintf("unknown column %q", name))
 }
 
+// Const returns the value of constant column name. If this column
+// does not exist or is not a constant column, Const returns nil,
+// false.
+func (t *Table) Const(name string) (val interface{}, ok bool) {
+	cv, ok := t.consts[name]
+	return cv, ok
+}
+
+// isEmpty returns true if t is an empty Table, meaning it has no rows
+// or columns.
+func (t *Table) isEmpty() bool {
+	return t.colNames == nil
+}
+
 // Tables returns the groups IDs in this Table. If t is empty, there
 // are no group IDs. Otherwise, there is only RootGroupID.
 func (t *Table) Tables() []GroupID {
-	if t.cols == nil {
+	if t.isEmpty() {
 		return []GroupID{}
 	}
 	return []GroupID{RootGroupID}
@@ -203,7 +272,7 @@ func (t *Table) Tables() []GroupID {
 // Table returns t if gid is RootGroupID and t is not empty; otherwise
 // it returns nil.
 func (t *Table) Table(gid GroupID) *Table {
-	if gid == RootGroupID && t.cols != nil {
+	if gid == RootGroupID && !t.isEmpty() {
 		return t
 	}
 	return nil
@@ -221,7 +290,7 @@ func (t *Table) AddTable(gid GroupID, t2 *Table) Grouping {
 			return new(Table)
 		}
 		return t
-	} else if t2.cols == nil {
+	} else if t2.isEmpty() {
 		return t
 	} else if gid == RootGroupID {
 		return t2
@@ -250,7 +319,7 @@ func (g *groupedTable) Table(gid GroupID) *Table {
 func (g *groupedTable) AddTable(gid GroupID, t *Table) Grouping {
 	// TODO: Currently adding N tables is O(N^2).
 
-	if t != nil && t.cols == nil {
+	if t != nil && t.isEmpty() {
 		// Adding an empty table has no effect.
 		return g
 	}
@@ -281,11 +350,19 @@ func (g *groupedTable) AddTable(gid GroupID, t *Table) Grouping {
 	// Check that t's column structure matches.
 	tBase := ng.tables[ng.groups[0]]
 	for _, col := range ng.colNames {
-		if _, ok := t.cols[col]; !ok {
+		var t0, t1 reflect.Type
+		if c, ok := tBase.cols[col]; ok {
+			t0 = reflect.TypeOf(c).Elem()
+		} else {
+			t0 = reflect.TypeOf(tBase.consts[col])
+		}
+		if c, ok := t.cols[col]; ok {
+			t1 = reflect.TypeOf(c).Elem()
+		} else if cv, ok := t.consts[col]; ok {
+			t1 = reflect.TypeOf(cv)
+		} else {
 			panic(fmt.Sprintf("table missing column %q", col))
 		}
-		t0 := reflect.TypeOf(tBase.cols[col])
-		t1 := reflect.TypeOf(t.cols[col])
 		if t0 != t1 {
 			panic(&generic.TypeError{t0, t1, fmt.Sprintf("for column %q are not the same", col)})
 		}
