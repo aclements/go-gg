@@ -269,6 +269,7 @@ func (s *identityScale) CloneScaler() Scaler {
 // bounds and such. I don't really want to expose the whole type.
 // Maybe a sub-interface for continuous Scalers?
 func NewLinearScaler() ContinuousScaler {
+	// TODO: Control over base.
 	return &linearScale{
 		s:       scale.Linear{Min: math.NaN(), Max: math.NaN()},
 		dataMin: math.NaN(),
@@ -280,6 +281,7 @@ type linearScale struct {
 	s scale.Linear
 	r Ranger
 
+	domainType       reflect.Type
 	dataMin, dataMax float64
 }
 
@@ -288,6 +290,10 @@ func (s *linearScale) String() string {
 }
 
 func (s *linearScale) ExpandDomain(v table.Slice) {
+	if s.domainType == nil {
+		s.domainType = reflect.TypeOf(v).Elem()
+	}
+
 	var data []float64
 	generic.ConvertSlice(&data, v)
 	min, max := s.dataMin, s.dataMax
@@ -371,21 +377,38 @@ func (s *linearScale) Map(x interface{}) interface{} {
 }
 
 func (s *linearScale) Ticks(n int) (major, minor table.Slice, labels []string) {
+	type Stringer interface {
+		String() string
+	}
+
 	ls := s.get()
 	majorx, minorx := ls.Ticks(n)
 
 	// Compute labels.
 	//
 	// TODO: Custom label formats.
-	//
-	// TODO: If the input type is not a built-in type, it may have
-	// a useful custom String method. If it's integer-typed, maybe
-	// I don't let the tick level go below 0.
 	labels = make([]string, len(majorx))
+	if s.domainType != nil {
+		z := reflect.Zero(s.domainType).Interface()
+		if _, ok := z.(Stringer); ok {
+			// Convert the ticks back into the domain type
+			// and use its String method.
+			//
+			// TODO: If the domain type is integral, don't
+			// let the tick level go below 0.
+			for i, x := range majorx {
+				v := reflect.ValueOf(x).Convert(s.domainType)
+				labels[i] = v.Interface().(Stringer).String()
+			}
+			goto done
+		}
+	}
+	// Otherwise, just format them as floats.
 	for i, x := range majorx {
 		labels[i] = fmt.Sprintf("%g", x)
 	}
 
+done:
 	return majorx, minorx, labels
 }
 
