@@ -19,7 +19,7 @@ import (
 // fontSize is the font size in pixels.
 //
 // TODO: Theme.
-const fontSize float64 = 12
+const fontSize float64 = 14
 
 // facetLabelHeight is the height of facet labels, as a multiple of
 // the font height.
@@ -175,7 +175,7 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 
 	// Draw.
 	svg := svg.New(w)
-	svg.Start(width, height, fmt.Sprintf(`font-size="%.6gpx" font-family="sans-serif"`, fontSize))
+	svg.Start(width, height, fmt.Sprintf(`font-size="%.6gpx" font-family="Roboto,&quot;Helvetica Neue&quot;,Helvetica,Arial,sans-serif"`, fontSize))
 	defer svg.End()
 
 	// Render each plot element.
@@ -319,9 +319,9 @@ func (e *eltTicks) render(svg *svg.SVG) {
 		for i, label := range ticks.labels {
 			tick := pos[i]
 			if e.axis == 'x' {
-				svg.Text(int(tick), int(y+xTickSep), label, `text-anchor="middle" dy="1em" fill="#888"`) // TODO: Theme.
+				svg.Text(int(tick), int(y+xTickSep), label, `text-anchor="middle" dy="1em" fill="#666"`) // TODO: Theme.
 			} else {
-				svg.Text(int(x+w-yTickSep), int(tick), label, `text-anchor="end" dy=".3em" fill="#888"`)
+				svg.Text(int(x+w-yTickSep), int(tick), label, `text-anchor="end" dy=".3em" fill="#666"`)
 			}
 		}
 	}
