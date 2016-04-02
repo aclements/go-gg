@@ -91,9 +91,7 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 	subplots := make(map[*subplot]*eltSubplot)
 	plotElts := []plotElt{}
 	for _, mark := range p.marks {
-		// TODO: This is wrong. If there are non-subplot
-		// groups, it'll add the same mark multiple times to
-		// the plotElt.
+		submarks := make(map[*eltSubplot]plotMark)
 		for _, gid := range mark.groups {
 			subplot := subplotOf(gid)
 			elt := subplots[subplot]
@@ -102,7 +100,14 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 				plotElts = append(plotElts, elt)
 				subplots[subplot] = elt
 			}
-			elt.marks = append(elt.marks, mark)
+
+			submark := submarks[elt]
+			submark.m = mark.m
+			submark.groups = append(submark.groups, gid)
+			submarks[elt] = submark
+		}
+		for subplot, submark := range submarks {
+			subplot.marks = append(subplot.marks, submark)
 		}
 	}
 	// Subdivide the scales.
@@ -212,13 +217,6 @@ func (e *eltSubplot) render(svg *svg.SVG) {
 	// TODO: Clip to plot area.
 	for _, mark := range e.marks {
 		for _, gid := range mark.groups {
-			if subplotOf(gid) != e.subplot {
-				// TODO: Figure this out when
-				// we're building subplots.
-				// This is asymptotically
-				// inefficient.
-				continue
-			}
 			env.gid = gid
 			mark.m.mark(env, svg)
 		}
