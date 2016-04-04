@@ -151,6 +151,11 @@ type LayerPoints struct {
 	// point. If Color is "", it defaults to constant black.
 	Color string
 
+	// Opacity names the column that defines the opacity of each
+	// point. If Opacity is "", it defaults to fully opaque. This
+	// is multiplied by any alpha value specified by Color.
+	Opacity string
+
 	// XXX fill vs stroke, size, shape
 }
 
@@ -173,6 +178,10 @@ func (l LayerPoints) Apply(p *Plot) {
 		// Maybe I should have a "color" aesthetic for the
 		// "primary" color?
 		p.use("stroke", l.Color),
+		// TODO: What scale for opacity? Or should I assume
+		// callers will use PreScaled values if they want
+		// specific opacities? What's the physical type?
+		p.use("opacity", l.Opacity),
 	}, p.Data().Tables()})
 }
 
