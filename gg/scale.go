@@ -117,6 +117,7 @@ type ContinuousScaler interface {
 
 	SetMin(v float64) ContinuousScaler
 	SetMax(v float64) ContinuousScaler
+	Include(v float64) ContinuousScaler
 }
 
 var float64Type = reflect.TypeOf(float64(0))
@@ -320,6 +321,19 @@ func (s *linearScale) SetMin(v float64) ContinuousScaler {
 
 func (s *linearScale) SetMax(v float64) ContinuousScaler {
 	s.s.Max = v
+	return s
+}
+
+func (s *linearScale) Include(v float64) ContinuousScaler {
+	if math.IsNaN(v) || math.IsInf(v, 0) {
+		return s
+	}
+	if math.IsNaN(s.dataMin) {
+		s.dataMin, s.dataMax = v, v
+	} else {
+		s.dataMin = math.Min(s.dataMin, v)
+		s.dataMax = math.Max(s.dataMax, v)
+	}
 	return s
 }
 
