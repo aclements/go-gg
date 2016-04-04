@@ -151,6 +151,7 @@ func isCardinal(k reflect.Kind) bool {
 
 type defaultScale struct {
 	scale Scaler
+	r     Ranger
 }
 
 func (s *defaultScale) String() string {
@@ -164,6 +165,10 @@ func (s *defaultScale) ExpandDomain(v table.Slice) {
 		if err != nil {
 			panic(&generic.TypeError{reflect.TypeOf(v), nil, err.Error()})
 		}
+		if s.r != nil {
+			s.scale.Ranger(s.r)
+			s.r = nil
+		}
 	}
 	s.scale.ExpandDomain(v)
 }
@@ -171,19 +176,31 @@ func (s *defaultScale) ExpandDomain(v table.Slice) {
 func (s *defaultScale) ensure() Scaler {
 	if s.scale == nil {
 		s.scale = NewLinearScaler()
+		if s.r != nil {
+			s.scale.Ranger(s.r)
+			s.r = nil
+		}
 	}
 	return s.scale
 }
 
 func (s *defaultScale) Ranger(r Ranger) Ranger {
-	// TODO: It would be nice if a package user could grab a scale
-	// and set a ranger on it without necessarily defaulting it to
-	// a linear scale.
-	return s.ensure().Ranger(r)
+	// If there's no underlying scale yet, record the Ranger
+	// locally rather than trying to guess a scale. This way users
+	// can easily set Rangers before training any data.
+	if s.scale == nil {
+		old := s.r
+		s.r = r
+		return old
+	}
+	return s.scale.Ranger(r)
 }
 
 func (s *defaultScale) RangeType() reflect.Type {
-	return s.ensure().RangeType()
+	if s.scale == nil {
+		return s.r.RangeType()
+	}
+	return s.scale.RangeType()
 }
 
 func (s *defaultScale) Map(x interface{}) interface{} {
@@ -196,9 +213,9 @@ func (s *defaultScale) Ticks(n int) (major, minor table.Slice, labels []string) 
 
 func (s *defaultScale) CloneScaler() Scaler {
 	if s.scale == nil {
-		return &defaultScale{}
+		return &defaultScale{nil, s.r}
 	}
-	return &defaultScale{s.scale.CloneScaler()}
+	return &defaultScale{s.scale.CloneScaler(), nil}
 }
 
 func DefaultScale(seq table.Slice) (Scaler, error) {
