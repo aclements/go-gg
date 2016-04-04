@@ -31,6 +31,8 @@ type Plot struct {
 	marks      []plotMark
 
 	axisLabels map[string][]string
+
+	constNonce int
 }
 
 func NewPlot(data table.Grouping) *Plot {
@@ -67,6 +69,30 @@ func (p *Plot) SetData(data table.Grouping) *Plot {
 // Data returns p's current data table.
 func (p *Plot) Data() table.Grouping {
 	return p.env.data
+}
+
+// Const creates a new constant column bound to val in all groups and
+// returns the generated column name. This is a convenient way to pass
+// constant values to layers as columns.
+//
+// TODO: Typically this should be used with PreScaled or physical types.
+func (p *Plot) Const(val interface{}) string {
+	tab := p.Data()
+
+retry:
+	col := fmt.Sprintf("[gg-const-%d]", p.constNonce)
+	p.constNonce++
+	for _, col2 := range tab.Columns() {
+		if col == col2 {
+			goto retry
+		}
+	}
+
+	p.SetData(table.MapTables(func(_ table.GroupID, t *table.Table) *table.Table {
+		return t.AddConst(col, val)
+	}, tab))
+
+	return col
 }
 
 type scalerTree struct {
