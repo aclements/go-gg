@@ -129,10 +129,17 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 	plotElts = addSubplotLabels(plotElts)
 
 	// Add axis labels.
-	//
-	// TODO: Allow user to override these.
-	xlabel := strings.Join(generic.Nub(p.axisLabels["x"]).([]string), "\n")
-	ylabel := strings.Join(generic.Nub(p.axisLabels["y"]).([]string), "\n")
+	var xlabel, ylabel string
+	if l, ok := p.axisLabels["x"]; ok {
+		xlabel = l
+	} else {
+		xlabel = strings.Join(generic.Nub(p.autoAxisLabels["x"]).([]string), "\n")
+	}
+	if l, ok := p.axisLabels["y"]; ok {
+		ylabel = l
+	} else {
+		ylabel = strings.Join(generic.Nub(p.autoAxisLabels["y"]).([]string), "\n")
+	}
 	plotElts = addAxisLabels(plotElts, xlabel, ylabel)
 
 	// Compute plot element layout.

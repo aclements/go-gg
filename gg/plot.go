@@ -30,7 +30,8 @@ type Plot struct {
 	scaleSet   map[scaleKey]bool
 	marks      []plotMark
 
-	axisLabels map[string][]string
+	axisLabels     map[string]string
+	autoAxisLabels map[string][]string
 
 	constNonce int
 }
@@ -40,10 +41,11 @@ func NewPlot(data table.Grouping) *Plot {
 		env: &plotEnv{
 			data: data,
 		},
-		scales:     make(map[string]scalerTree),
-		scaledData: make(map[scaledDataKey]*scaledData),
-		scaleSet:   make(map[scaleKey]bool),
-		axisLabels: make(map[string][]string),
+		scales:         make(map[string]scalerTree),
+		scaledData:     make(map[scaledDataKey]*scaledData),
+		scaleSet:       make(map[scaleKey]bool),
+		axisLabels:     make(map[string]string),
+		autoAxisLabels: make(map[string][]string),
 	}
 	return p
 }
@@ -242,7 +244,7 @@ func (p *Plot) use(aes string, col string) *scaledData {
 
 	// Update axis labels.
 	if aes == "x" || aes == "y" {
-		p.axisLabels[aes] = append(p.axisLabels[aes], col)
+		p.autoAxisLabels[aes] = append(p.autoAxisLabels[aes], col)
 	}
 
 	return sd
@@ -275,4 +277,23 @@ func (p *Plot) Add(plotters ...Plotter) *Plot {
 		plotter.Apply(p)
 	}
 	return p
+}
+
+// AxisLabel returns a Plotter that sets the label of an axis on a
+// Plot. By default, Plot constructs automatic axis labels from column
+// names, but AxisLabel lets callers override these.
+//
+// TODO: Should labels be attached to aesthetics, generally?
+//
+// TODO: Should this really be a Plotter or just a method of Plot?
+func AxisLabel(axis, label string) Plotter {
+	return axisLabel{axis, label}
+}
+
+type axisLabel struct {
+	axis, label string
+}
+
+func (a axisLabel) Apply(p *Plot) {
+	p.axisLabels[a.axis] = a.label
 }
