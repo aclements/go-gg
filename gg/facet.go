@@ -68,6 +68,9 @@ type FacetCommon struct {
 
 	// Labeler is a function that constructs facet labels from
 	// data values. If this is nil, the default is fmt.Sprint.
+	//
+	// TODO: Call this through reflect to get the argument type
+	// right?
 	Labeler func(interface{}) string
 }
 

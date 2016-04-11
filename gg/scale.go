@@ -32,6 +32,11 @@ import (
 //
 // It's not really "continuous", it's more specifically cardinal.
 
+// TODO: time.Time and time.Duration scalers. For time.Duration,
+// handle sub-second as (10 seconds)^n (for n <= 0), handle seconds to
+// minutes at multiples of 10 seconds, and likewise minutes to hours
+// as multiples of 10 minutes, and handle hours as (10 hours)^n.
+
 // XXX
 //
 // A Scaler can be cardinal, discrete, or identity.
@@ -482,7 +487,10 @@ type ordinalScale struct {
 }
 
 func (s *ordinalScale) ExpandDomain(v table.Slice) {
-	// TODO: Type-check?
+	// TODO: Type-check? For example, if I try to use a cardinal
+	// type for "Color" and then a continuous type, this will
+	// crash confusingly only once Map calls makeIndex and
+	// NubAppend tries to make a consistently typed slice.
 	s.allData = append(s.allData, generic.Slice(v))
 	s.ordered, s.index = nil, nil
 }

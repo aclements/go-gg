@@ -202,6 +202,10 @@ func (m *markTiles) mark(env *renderEnv, canvas *svg.SVG) {
 		case 0:
 			return 0, 0, -1, false
 		case 1:
+			// TODO: In this case we'll produce a 1 pixel
+			// wide/high line. That's probably not what's
+			// desired. Maybe we want it to be the
+			// width/height of the plot area?
 			minGap = 1.0
 		default:
 			sort.Float64s(unique)

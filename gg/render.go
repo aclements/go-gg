@@ -73,6 +73,10 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 
 	// TODO: Expose the layout so a package user can put together
 	// multiple Plots.
+	//
+	// What if the user wants multiple aligned plots, but as
+	// *different* images (e.g., flipping from one slide to
+	// another)?
 
 	// TODO: Let the user alternatively specify the width and
 	// height of the subplots, rather than the whole plot.
@@ -83,6 +87,9 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 
 	// TODO: Make sure *all* Scalers have Rangers or the user will
 	// get confusing panics.
+
+	// TODO: If the user restricts, say, the X range, should that
+	// only train the Y axis on what's in the X range?
 
 	// Assign default Rangers to scales that don't have them.
 	//
@@ -183,6 +190,24 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 		_, _, w, h := elt.Layout()
 		genTicks := func(aes string, size float64) {
 			for s := range elt.scales[aes] {
+				// TODO: A fixed pixel distance is a
+				// bad idea if the font size changes
+				// or the labels are long. Ideally we
+				// would set the minimum distance
+				// *between* labels. This might
+				// require hooking in to the tick
+				// level optimizer.
+				//
+				// The underlying scales could expose
+				// the tick "generator" function for
+				// that type of scale and there could
+				// be a generic optimizer algorithm
+				// that takes a predicate.
+				//
+				// The minimum distance between the
+				// labels would also balance X and Y
+				// better, since you can pack more
+				// ticks into the Y axis.
 				nTicks := int(size / tickDistance)
 				if nTicks < 1 {
 					nTicks = 1
@@ -259,10 +284,6 @@ func (e *eltSubplot) render(svg *svg.SVG) {
 	svg.Path(fmt.Sprintf("M%g %gV%gH%g", r(x), r(y), r(y+h), r(x+w)), "stroke:#888; fill:none; stroke-width:2") // TODO: Theme.
 
 	// Render scale ticks.
-	//
-	// TODO: These tend not to match up nicely in the
-	// bottom left corner. Maybe I need to draw one path
-	// for the two lines and then add tick marks.
 	for s := range e.scales["x"] {
 		renderScale(svg, 'x', s, e.ticks[s], y+h)
 	}
@@ -325,10 +346,14 @@ func renderScale(svg *svg.SVG, dir rune, scale Scaler, ticks plotEltTicks, pos f
 
 func (e *eltTicks) render(svg *svg.SVG) {
 	x, y, w, h := e.Layout()
-	// TODO: This doesn't show ticks in the margin
-	// area. This may be fine with niced tick
-	// labels, but it tends to look bad with
-	// un-niced ticks.
+	// TODO: This doesn't show ticks in the margin area. This may
+	// be fine with niced tick labels, but it tends to look bad
+	// with un-niced ticks. Ideally we would expand the input
+	// domain instead, but this isn't well-defined for discrete
+	// scales. We could use Unmap to try to find the expanded
+	// input domain on both sides, but fall back to expanding the
+	// ranger if Unmap fails (which it would for a discrete
+	// scale).
 	m := e.ticksFor.plotMargins
 	xRanger := NewFloatRanger(x+m.l, x+w-m.r)
 	yRanger := NewFloatRanger(y+h-m.b, y+m.t)
