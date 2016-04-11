@@ -50,7 +50,7 @@ type sortIntSlice struct {
 }
 
 func (s sortIntSlice) Len() int {
-	return s.Len()
+	return s.Value.Len()
 }
 
 func (s sortIntSlice) Less(i, j int) bool {
@@ -68,7 +68,7 @@ type sortUintSlice struct {
 }
 
 func (s sortUintSlice) Len() int {
-	return s.Len()
+	return s.Value.Len()
 }
 
 func (s sortUintSlice) Less(i, j int) bool {
@@ -86,7 +86,7 @@ type sortFloatSlice struct {
 }
 
 func (s sortFloatSlice) Len() int {
-	return s.Len()
+	return s.Value.Len()
 }
 
 func (s sortFloatSlice) Less(i, j int) bool {
@@ -104,7 +104,7 @@ type sortStringSlice struct {
 }
 
 func (s sortStringSlice) Len() int {
-	return s.Len()
+	return s.Value.Len()
 }
 
 func (s sortStringSlice) Less(i, j int) bool {
