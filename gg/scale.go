@@ -68,7 +68,9 @@ type Scaler interface {
 	ExpandDomain(table.Slice)
 
 	// Ranger sets this Scaler's output range if r is non-nil and
-	// returns the previous range.
+	// returns the previous range. If a scale's Ranger is nil, it
+	// will be assigned a default Ranger based on its aesthetic
+	// when the Plot is rendered.
 	Ranger(r Ranger) Ranger
 
 	// XXX Should RangeType be implied by the aesthetic?
@@ -254,6 +256,24 @@ func DefaultScale(seq table.Slice) (Scaler, error) {
 	return nil, fmt.Errorf("no default scale type for %T", seq)
 }
 
+// defaultRanger returns the default Ranger for the given aesthetic.
+// If aes is an axis aesthetic, it returns nil (since these Rangers
+// are assigned at render time). If aes is unknown, it panics.
+func defaultRanger(aes string) Ranger {
+	switch aes {
+	case "x", "y":
+		return nil
+
+	case "stroke", "fill":
+		return &defaultColorRanger{}
+
+	case "opacity":
+		return NewFloatRanger(0, 1)
+	}
+
+	panic(fmt.Sprintf("unknown aesthetic %q", aes))
+}
+
 func NewIdentityScale() Scaler {
 	return &identityScale{}
 }
@@ -402,7 +422,7 @@ func (s *linearScale) Map(x interface{}) interface{} {
 		} else if level >= levels {
 			level = levels - 1
 		}
-		return r.Map(level, levels)
+		return r.MapLevel(level, levels)
 
 	default:
 		panic("Ranger must be a ContinuousRanger or DiscreteRanger")
@@ -498,24 +518,24 @@ func (s *ordinalScale) Map(x interface{}) interface{} {
 	s.makeIndex()
 	i := s.index[x]
 	switch r := s.r.(type) {
+	case DiscreteRanger:
+		minLevels, maxLevels := r.Levels()
+		if len(s.index) <= minLevels {
+			return r.MapLevel(i, minLevels)
+		} else if len(s.index) <= maxLevels {
+			return r.MapLevel(i, len(s.index))
+		} else {
+			// TODO: Binning would also be a reasonable
+			// policy.
+			return r.MapLevel(i%maxLevels, maxLevels)
+		}
+
 	case ContinuousRanger:
 		// Map i to the "middle" of the ith equal j-way
 		// subdivision of [0, 1].
 		j := len(s.index)
 		x := (float64(i) + 0.5) / float64(j)
 		return r.Map(x)
-
-	case DiscreteRanger:
-		minLevels, maxLevels := r.Levels()
-		if len(s.index) <= minLevels {
-			return r.Map(i, minLevels)
-		} else if len(s.index) <= maxLevels {
-			return r.Map(i, len(s.index))
-		} else {
-			// TODO: Binning would also be a reasonable
-			// policy.
-			return r.Map(i%maxLevels, maxLevels)
-		}
 
 	default:
 		panic("Ranger must be a ContinuousRanger or DiscreteRanger")
@@ -556,13 +576,13 @@ type Ranger interface {
 type ContinuousRanger interface {
 	Ranger
 	Map(x float64) (y interface{})
-	Unmap(y interface{}) (x float64)
+	Unmap(y interface{}) (x float64, ok bool)
 }
 
 type DiscreteRanger interface {
 	Ranger
 	Levels() (min, max int)
-	Map(i, j int) interface{}
+	MapLevel(i, j int) interface{}
 }
 
 func NewFloatRanger(lo, hi float64) ContinuousRanger {
@@ -585,8 +605,14 @@ func (r *floatRanger) Map(x float64) interface{} {
 	return x*r.w + r.lo
 }
 
-func (r *floatRanger) Unmap(y interface{}) float64 {
-	return (y.(float64) - r.lo) / r.w
+func (r *floatRanger) Unmap(y interface{}) (float64, bool) {
+	switch y := y.(type) {
+	default:
+		return 0, false
+
+	case float64:
+		return (y - r.lo) / r.w, true
+	}
 }
 
 func NewColorRanger(palette []color.Color) DiscreteRanger {
@@ -609,13 +635,80 @@ func (r *colorRanger) Levels() (min, max int) {
 	return len(r.palette), len(r.palette)
 }
 
-func (r *colorRanger) Map(i, j int) interface{} {
+func (r *colorRanger) MapLevel(i, j int) interface{} {
 	if i < 0 {
 		i = 0
 	} else if i >= len(r.palette) {
 		i = len(r.palette) - 1
 	}
 	return r.palette[i]
+}
+
+// defaultColorRanger is the default color ranger. It is both a
+// ContinuousRanger and a DiscreteRanger.
+type defaultColorRanger struct{}
+
+// autoPalette is the discrete palette used by defaultColorRanger.
+var autoPalette = []color.Color{
+	color.RGBA{0x4c, 0x72, 0xb0, 0xff},
+	color.RGBA{0x55, 0xa8, 0x68, 0xff},
+	color.RGBA{0xc4, 0x4e, 0x52, 0xff},
+	color.RGBA{0x81, 0x72, 0xb2, 0xff},
+	color.RGBA{0xcc, 0xb9, 0x74, 0xff},
+	color.RGBA{0x64, 0xb5, 0xcd, 0xff},
+}
+
+func (r *defaultColorRanger) RangeType() reflect.Type {
+	return colorType
+}
+
+func (r *defaultColorRanger) Map(x float64) interface{} {
+	// We use green because the human visual system is most
+	// sensitive to green and can thus distinguish shades most
+	// readily. Green also connotes "good", where red connotes
+	// "bad". Blue would be a neutral color, but is much less
+	// visible.
+	//
+	// We're intentionally taking advantage of the sRGB curve:
+	// people are better at distinguishing dark shades, so even
+	// though these points are not at all evenly spaced in terms
+	// of absolute luminance, they are reasonably spaced in terms
+	// of perceptual difference.
+	x = math.Max(0, math.Min(1, x)) // Clamp.
+	rb, g := float64(0), x*(256+64)
+	if g < 0 {
+		g = 0
+	} else if g > 255 {
+		rb = g - 255
+		g = 255
+	}
+	return color.RGBA{uint8(rb), uint8(g), uint8(rb), 0xff}
+}
+
+func (r *defaultColorRanger) Unmap(y interface{}) (float64, bool) {
+	switch y := y.(type) {
+	default:
+		return 0, false
+
+	case color.RGBA:
+		if y.R != y.B || (y.R != 0 && y.G != 0xff) || y.R > 65 {
+			return 0, false
+		}
+		return float64(y.R+y.G) / float64(256+64), true
+	}
+}
+
+func (r *defaultColorRanger) Levels() (min, max int) {
+	return len(autoPalette), len(autoPalette)
+}
+
+func (r *defaultColorRanger) MapLevel(i, j int) interface{} {
+	if i < 0 {
+		i = 0
+	} else if i >= len(autoPalette) {
+		i = len(autoPalette) - 1
+	}
+	return autoPalette[i]
 }
 
 // mapMany applies scaler.Map to all of the values in seq and returns

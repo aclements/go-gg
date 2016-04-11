@@ -84,6 +84,23 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 	// TODO: Make sure *all* Scalers have Rangers or the user will
 	// get confusing panics.
 
+	// Assign default Rangers to scales that don't have them.
+	//
+	// TODO: Do this on a clone of the scale so this doesn't
+	// persist.
+	for aes, scales := range p.scales {
+		if aes == "x" || aes == "y" {
+			// We'll assign these when we render each
+			// subplot.
+			continue
+		}
+		for _, scale := range scales.scales {
+			if scale.Ranger(nil) == nil {
+				scale.Ranger(defaultRanger(aes))
+			}
+		}
+	}
+
 	// Find all of the subplots and subdivide the marks.
 	//
 	// TODO: If a mark was done in a parent subplot, broadcast it
