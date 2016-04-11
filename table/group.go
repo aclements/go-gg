@@ -127,6 +127,11 @@ func GroupBy(g Grouping, cols ...string) Grouping {
 					subtable = subtable.AddConst(name, subgroup.val)
 					continue
 				}
+				if cv, ok := t.Const(name); ok {
+					// Keep constants constant.
+					subtable = subtable.AddConst(name, cv)
+					continue
+				}
 				seq := t.Column(name)
 				seq = generic.MultiIndex(seq, rows)
 				subtable = subtable.Add(name, seq)
