@@ -21,14 +21,14 @@ import (
 // X is the only required field. All other fields have reasonable
 // default zero values.
 //
-// The result of Density has two columns in addition to constant
+// The result of Density has three columns in addition to constant
 // columns from the input:
 //
 // - Column X is the points at which the density estimate is sampled.
 //
-// - If Cumulative is false, column "probability density" is the
-//   density estimate. If Cumulative is true, column "cumulative
-//   density" is the cumulative density estimate.
+// - Column "probability density" is the density estimate.
+//
+// - Column "cumulative density" is the cumulative density estimate.
 type Density struct {
 	// X is the name of the column to use for samples.
 	X string
@@ -61,11 +61,6 @@ type Density struct {
 	// makes it possible to stack KDEs and easier to compare KDEs
 	// across groups.
 	SplitGroups bool
-
-	// Cumulative indicates that Density should produce a
-	// cumulative density estimate rather than a probability
-	// density estimate.
-	Cumulative bool
 
 	// Kernel is the kernel to use for the KDE.
 	Kernel stats.KDEKernel
@@ -107,10 +102,7 @@ func (d Density) F(g table.Grouping) table.Grouping {
 	if d.Widen == 0 {
 		d.Widen = 3
 	}
-	resp := "probability density"
-	if d.Cumulative {
-		resp = "cumulative density"
-	}
+	dname, cname := "probability density", "cumulative density"
 
 	// Gather samples.
 	samples := map[table.GroupID]stats.Sample{}
@@ -152,7 +144,7 @@ func (d Density) F(g table.Grouping) table.Grouping {
 		kde.Sample = samples[gid]
 
 		if kde.Sample.Weight() == 0 {
-			return new(table.Table).Add(d.X, []float64{}).Add(resp, []float64{})
+			return new(table.Table).Add(d.X, []float64{}).Add(dname, []float64{}).Add(cname, []float64{})
 		}
 
 		if d.Bandwidth == 0 {
@@ -167,11 +159,8 @@ func (d Density) F(g table.Grouping) table.Grouping {
 
 		ss := vec.Linspace(min, max, d.N)
 		nt := new(table.Table).Add(d.X, ss)
-		if d.Cumulative {
-			nt = nt.Add(resp, vec.Map(kde.CDF, ss))
-		} else {
-			nt = nt.Add(resp, vec.Map(kde.PDF, ss))
-		}
+		nt = nt.Add(dname, vec.Map(kde.PDF, ss))
+		nt = nt.Add(cname, vec.Map(kde.CDF, ss))
 		return preserveConsts(nt, t)
 	}, g)
 }
