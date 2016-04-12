@@ -90,7 +90,8 @@ func (s LOESS) F(g table.Grouping) table.Grouping {
 // TODO: Rethink evalPoints/preserveConsts. We probably want an
 // interface for "functions" in the mathematical sense that knows how
 // to evaluate them at reasonable points and bundle their results into
-// a table.
+// a table. OTOH, ECDF uses parts of these, but we don't want to
+// evaluate that at regular intervals.
 
 func evalPoints(g table.Grouping, x string, n int, widen float64, splitGroups bool) map[table.GroupID][]float64 {
 	var xs []float64

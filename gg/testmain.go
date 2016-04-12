@@ -47,7 +47,7 @@ func main() {
 	plot.Add(gg.LayerLines{X: "x", Y: "y"})
 
 	plot.Save()
-	plot.SetData(ggstat.ECDF(plot.Data(), "x", ""))
+	plot.SetData(ggstat.ECDF{X: "x"}.F(plot.Data()))
 	plot.Add(gg.LayerSteps{Step: gg.StepHV})
 	//plot.Add(gg.LayerSteps{Step:gg.StepHMid})
 	plot.Restore()

@@ -10,44 +10,94 @@ import (
 	"github.com/aclements/go-moremath/vec"
 )
 
-// ECDF constructs an empirical CDF. xcol names the column in g for
-// data points. wcol may be "", in which case all points are equally
-// weighted, or name a column in g for weights. ECDF returns a
-// table.Grouped with the same groups as g and with two columns in
-// addition to constant columns from the input::
+// ECDF constructs an empirical CDF from a set of samples.
 //
-// - Column xcol corresponds to the input data points.
+// X is the only required field. All other fields have reasonable
+// default zero values.
 //
-// - Column "cumulative density" corresponds to the cumulative density
-// at that data point.
+// The result of ECDF has three columns in addition to constant
+// columns from the input. The names of the columns depend on whether
+// Label is "".
 //
-// ECDF adds two more points 5% before the first point and 5% after
-// the last point to make the 0 and 1 levels clear.
+// - Column X is the points at which the CDF changes (a subset of the
+// samples).
 //
-// TODO: These columns names make automatic labeling work out, but are
-// rather verbose. Should we do this a different way? If layers used
-// the 1st and 2nd columns by default for X and Y, you may never have
-// to mention the column names in most situations.
+// - Column "cumulative density" or "cumulative density of <label>" is
+// the cumulative density estimate.
 //
-// TODO: Since this operates on a table.Grouping, it can't account for
-// scale transforms. Should it operate on a Plot instead?
-func ECDF(g table.Grouping, xcol, wcol string) table.Grouping {
-	g = table.SortBy(g, xcol)
-	return table.MapTables(func(_ table.GroupID, t *table.Table) *table.Table {
+// - Column "cumulative count" (if W and Label are ""), "cumulative
+// weight" (if W is not "", but Label is "") or "cumulative <label>"
+// (if Label is not "") is the cumulative count or weight of samples.
+// That is, cumulative density times the total weight of the samples.
+type ECDF struct {
+	// X is the name of the column to use for samples.
+	X string
+
+	// W is the optional name of the column to use for sample
+	// weights. It may be "" to uniformly weight samples.
+	W string
+
+	// Label, if not "", gives a label for the samples. It is used
+	// to construct more specific names for the output columns. It
+	// should be a plural noun.
+	Label string
+
+	// Widen adjusts the domain of the returned ECDF. If Widen is
+	// not 1.0, ECDF will add a point below the smallest sample
+	// and above the largest sample to make the 0 and 1 levels
+	// clear. If Widen is 0, it is treated as 1.1 (that is, widen
+	// the domain by 10%, or 5% on the left and 5% on the right).
+	//
+	// TODO: Have a way to specify a specific range?
+	Widen float64
+
+	// SplitGroups indicates that each group in the table should
+	// have separate bounds based on the data in that group alone.
+	// The default, false, indicates that the bounds should be
+	// based on all of the data in the table combined. This makes
+	// it possible to stack ECDFs and easier to compare them
+	// across groups.
+	SplitGroups bool
+}
+
+func (s ECDF) F(g table.Grouping) table.Grouping {
+	// Construct output column names.
+	dname, cname := "cumulative density", "cumulative count"
+	if s.Label != "" {
+		dname += " of " + s.Label
+		cname = "cumulative " + s.Label
+	} else if s.W != "" {
+		cname = "cumulative weight"
+	}
+
+	g = table.SortBy(g, s.X)
+	if s.Widen <= 1.0 && s.Widen != 0 {
+		// Disallow narrowing, since this isn't a continuous
+		// function.
+		s.Widen = 1.0
+	}
+	col := getCol(g, s.X, s.Widen, s.SplitGroups)
+	return table.MapTables(func(gid table.GroupID, t *table.Table) *table.Table {
 		// Get input columns.
-		var xs, ws []float64
-		generic.ConvertSlice(&xs, t.MustColumn(xcol))
-		if wcol != "" {
-			generic.ConvertSlice(&ws, t.MustColumn(wcol))
+		var ws []float64
+		xs := col[gid].data
+		if s.W != "" {
+			generic.ConvertSlice(&ws, t.MustColumn(s.W))
 		}
 
 		// Ignore empty tables.
 		if len(xs) == 0 {
-			return new(table.Table).Add(xcol, []float64{}).Add("cumulative density", []float64{})
+			return new(table.Table).Add(s.X, []float64{}).Add(cname, []float64{}).Add(dname, []float64{})
 		}
 
 		// Create output columns.
-		xo, yo := make([]float64, 1), make([]float64, 1)
+		xo, do, co := make([]float64, 0), make([]float64, 0), make([]float64, 0)
+		if s.Widen != 1.0 {
+			// Extend to the left.
+			xo = append(xo, col[gid].min)
+			do = append(do, 0)
+			co = append(co, 0)
+		}
 
 		// Compute total weight.
 		var total float64
@@ -71,21 +121,21 @@ func ECDF(g table.Grouping, xcol, wcol string) table.Grouping {
 			}
 
 			xo = append(xo, xs[i])
-			yo = append(yo, cum/total)
+			do = append(do, cum/total)
+			co = append(co, cum)
 
 			i = j
 		}
 
-		// Extend to the left and right a bit.
-		//
-		// TODO: If ECDF was a struct, the margin could be
-		// controllable.
-		const margin = 0.05
-		span := xs[len(xs)-1] - xs[0]
-		xo[0], yo[0] = xs[0]-(margin*span), 0
-		xo, yo = append(xo, xs[len(xs)-1]+(margin*span)), append(yo, 1)
+		if s.Widen != 1.0 {
+			// Extend to the right.
+			xo = append(xo, col[gid].max)
+			do = append(do, 1)
+			co = append(co, cum)
+		}
 
-		nt := new(table.Table).Add(xcol, xo).Add("cumulative density", yo)
+		// Construct results table.
+		nt := new(table.Table).Add(s.X, xo).Add(dname, do).Add(cname, co)
 		return preserveConsts(nt, t)
 	}, g)
 }

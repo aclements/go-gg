@@ -13,9 +13,6 @@ import (
 	"github.com/aclements/go-moremath/vec"
 )
 
-// TODO: I'm experimenting with different representations for stats.
-// Make them consistent at some point.
-
 // TODO: Default to first (and second) column for X (and Y)?
 
 // Density constructs a probability density estimate from a set of
@@ -52,6 +49,9 @@ type Density struct {
 	// Otherwise, the domain will be expanded by Widen*Bandwidth
 	// (which may be the computed bandwidth). If Widen is 0, it is
 	// replaced with a default value of 3.
+	//
+	// TODO: This is different from ECDF and LeastSquares. Make
+	// them consistent.
 	Widen float64
 
 	// SplitGroups indicates that each group in the table should
