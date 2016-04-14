@@ -70,9 +70,9 @@ func (l LayerSteps) Apply(p *Plot) {
 // LayerPaths groups by Color and Fill, and then connects successive
 // data points in each group with a path and/or a filled polygon.
 type LayerPaths struct {
-	// X and Y name columns that define the location of each point
-	// on the path. If these are empty, they default to the first
-	// and second columns, respectively.
+	// X and Y name columns that define the input and response of
+	// each point on the path. If these are empty, they default to
+	// the first and second columns, respectively.
 	X, Y string
 
 	// Color names a column that defines the stroke color of each
@@ -142,7 +142,7 @@ func (l LayerPaths) apply(p *Plot, sort bool) {
 
 // LayerPoints layers a point mark at each data point.
 type LayerPoints struct {
-	// X and Y name columns that define the location of each
+	// X and Y name columns that define input and response of each
 	// point. If these are empty, they default to the first and
 	// second columns, respectively.
 	X, Y string
@@ -188,9 +188,9 @@ func (l LayerPoints) Apply(p *Plot) {
 // LayerTiles layers a rectangle at each data point. The rectangle is
 // specified by its center, width, and height.
 type LayerTiles struct {
-	// X and Y name columns that define the center of each
-	// rectangle. If they are "", they default to the first and
-	// second columns, respectively.
+	// X and Y name columns that define the input and response at
+	// the center of each rectangle. If they are "", they default
+	// to the first and second columns, respectively.
 	X, Y string
 
 	// Width and Height name columns that define the width and
@@ -241,9 +241,9 @@ func (l LayerTiles) Apply(p *Plot) {
 // TODO: Currently this makes one annotation per group. This should be
 // an option.
 type LayerTags struct {
-	// X and Y name columns that define the position each tag is
-	// attached to. If they are "", they default to the first and
-	// second columns, respectively.
+	// X and Y name columns that define the input and response
+	// each tag is attached to. If they are "", they default to
+	// the first and second columns, respectively.
 	X, Y string
 
 	// Label names the column that gives the text to put in the
