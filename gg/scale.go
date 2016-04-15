@@ -108,7 +108,10 @@ type Scaler interface {
 	// Output space is bad because I change the plot location in
 	// the course of layout. Currently it returns values in the
 	// input space or nil if ticks don't make sense.
-	Ticks(n int) (major, minor table.Slice, labels []string)
+	//
+	// XXX Rather than exposing scale.TickOptions, maybe this
+	// should expose just max and predicate?
+	Ticks(o scale.TickOptions) (major, minor table.Slice, labels []string)
 
 	CloneScaler() Scaler
 }
@@ -214,8 +217,8 @@ func (s *defaultScale) Map(x interface{}) interface{} {
 	return s.ensure().Map(x)
 }
 
-func (s *defaultScale) Ticks(n int) (major, minor table.Slice, labels []string) {
-	return s.ensure().Ticks(n)
+func (s *defaultScale) Ticks(o scale.TickOptions) (major, minor table.Slice, labels []string) {
+	return s.ensure().Ticks(o)
 }
 
 func (s *defaultScale) CloneScaler() Scaler {
@@ -298,7 +301,7 @@ func (s *identityScale) RangeType() reflect.Type {
 func (s *identityScale) Ranger(r Ranger) Ranger        { return nil }
 func (s *identityScale) Map(x interface{}) interface{} { return x }
 
-func (s *identityScale) Ticks(n int) (major, minor table.Slice, labels []string) {
+func (s *identityScale) Ticks(o scale.TickOptions) (major, minor table.Slice, labels []string) {
 	return nil, nil, nil
 }
 
@@ -434,13 +437,13 @@ func (s *linearScale) Map(x interface{}) interface{} {
 	}
 }
 
-func (s *linearScale) Ticks(n int) (major, minor table.Slice, labels []string) {
+func (s *linearScale) Ticks(o scale.TickOptions) (major, minor table.Slice, labels []string) {
 	type Stringer interface {
 		String() string
 	}
 
 	ls := s.get()
-	majorx, minorx := ls.Ticks(n)
+	majorx, minorx := ls.Ticks(o)
 
 	// Compute labels.
 	//
@@ -550,8 +553,8 @@ func (s *ordinalScale) Map(x interface{}) interface{} {
 	}
 }
 
-func (s *ordinalScale) Ticks(n int) (major, minor table.Slice, labels []string) {
-	// TODO: Return *no* ticks and only labels. Can't current
+func (s *ordinalScale) Ticks(o scale.TickOptions) (major, minor table.Slice, labels []string) {
+	// TODO: Return *no* ticks and only labels. Can't currently
 	// express this.
 
 	s.makeIndex()

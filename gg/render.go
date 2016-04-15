@@ -13,6 +13,7 @@ import (
 
 	"github.com/aclements/go-gg/generic"
 	"github.com/aclements/go-gg/table"
+	"github.com/aclements/go-moremath/scale"
 	"github.com/ajstarks/svgo"
 )
 
@@ -212,7 +213,7 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 				if nTicks < 1 {
 					nTicks = 1
 				}
-				major, _, labels := s.Ticks(nTicks)
+				major, _, labels := s.Ticks(scale.TickOptions{Max: nTicks})
 				elt.addTicks(s, major, labels)
 			}
 		}
