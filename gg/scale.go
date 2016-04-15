@@ -442,6 +442,17 @@ func (s *linearScale) Ticks(o scale.TickOptions) (major, minor table.Slice, labe
 		String() string
 	}
 
+	// If the domain type is integral, don't let the tick level go
+	// below 0. This is particularly important if the domain type
+	// is a Stringer since the conversion back to the domain type
+	// will cut off any fractional part.
+	switch s.domainType.Kind() {
+	case reflect.Int, reflect.Uint, reflect.Uintptr,
+		reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		o.MinLevel, o.MaxLevel = 0, 1000
+	}
+
 	ls := s.get()
 	majorx, minorx := ls.Ticks(o)
 
@@ -454,9 +465,6 @@ func (s *linearScale) Ticks(o scale.TickOptions) (major, minor table.Slice, labe
 		if _, ok := z.(Stringer); ok {
 			// Convert the ticks back into the domain type
 			// and use its String method.
-			//
-			// TODO: If the domain type is integral, don't
-			// let the tick level go below 0.
 			for i, x := range majorx {
 				v := reflect.ValueOf(x).Convert(s.domainType)
 				labels[i] = v.Interface().(Stringer).String()
