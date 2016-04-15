@@ -76,6 +76,11 @@ func (g GroupID) Label() interface{} {
 func GroupBy(g Grouping, cols ...string) Grouping {
 	// TODO: This would generate much less garbage if we grouped
 	// all of cols in one pass.
+	//
+	// TODO: Construct each result column as a contiguous slice
+	// and then cut that up into the groups so that it's one
+	// allocation per column regardless of how many groups there
+	// are.
 
 	if len(cols) == 0 {
 		return g

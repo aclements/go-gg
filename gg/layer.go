@@ -261,6 +261,9 @@ func (l *LayerTags) resolveDefaults() {
 }
 
 func (l LayerTags) Apply(p *Plot) {
+	// TODO: Should there be special "annotation marks" that are
+	// always on top and can perhaps extend outside the plot area?
+
 	l.resolveDefaults()
 	// TODO: I keep wanting an abstraction for a column across
 	// groups like this.

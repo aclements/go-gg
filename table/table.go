@@ -129,6 +129,8 @@ func reflectSlice(s Slice) reflect.Value {
 // with the given name, Add first removes it. Then, if data is
 // non-nil, Add adds a new column. If data is non-nil, it must have
 // the same length as any existing columns or Add will panic.
+//
+// TODO: "Add" suggests mutation. Should this be called "Plus"?
 func (t *Table) Add(name string, data Slice) *Table {
 	// TODO: Currently adding N columns is O(N^2). If we built the
 	// column index only when it was asked for, the usual case of
