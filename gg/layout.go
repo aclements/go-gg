@@ -72,16 +72,12 @@ type eltSubplot struct {
 	subplot *subplot
 	marks   []plotMark
 	scales  map[string]map[Scaler]bool
-	ticks   map[Scaler]plotEltTicks
+
+	xTicks, yTicks *eltTicks
 
 	plotMargins struct {
 		t, r, b, l float64
 	}
-}
-
-type plotEltTicks struct {
-	major  table.Slice
-	labels []string
 }
 
 func newEltSubplot(s *subplot) *eltSubplot {
@@ -89,7 +85,6 @@ func newEltSubplot(s *subplot) *eltSubplot {
 		eltCommon: eltCommon{xPath: eltPath{s.x}, yPath: eltPath{s.y}},
 		subplot:   s,
 		scales:    make(map[string]map[Scaler]bool),
-		ticks:     make(map[Scaler]plotEltTicks),
 	}
 }
 
@@ -103,16 +98,18 @@ func (e *eltSubplot) SetLayout(x, y, w, h float64) {
 	m.t, m.r, m.b, m.l = plotMargins(w, h)
 }
 
-func (e *eltSubplot) addTicks(scaler Scaler, major table.Slice, labels []string) {
-	e.ticks[scaler] = plotEltTicks{major, labels}
-}
-
 type eltTicks struct {
 	eltCommon
 	layout.Leaf
 
-	axis     rune // 'x' or 'y'
-	ticksFor *eltSubplot
+	axis     rune        // 'x' or 'y'
+	ticksFor *eltSubplot // Subplot to which this is directly attached
+	ticks    map[Scaler]plotEltTicks
+}
+
+type plotEltTicks struct {
+	major  table.Slice
+	labels []string
 }
 
 func newEltTicks(axis rune, s *eltSubplot) *eltTicks {
@@ -143,8 +140,80 @@ func (e *eltTicks) scales() map[Scaler]bool {
 	}
 }
 
+func (e *eltTicks) mapTicks(s Scaler, ticks table.Slice) (pixels []float64) {
+	x, y, w, h := e.Layout()
+	// TODO: This doesn't show ticks in the margin area. This may
+	// be fine with niced tick labels, but it tends to look bad
+	// with un-niced ticks. Ideally we would expand the input
+	// domain instead, but this isn't well-defined for discrete
+	// scales. We could use Unmap to try to find the expanded
+	// input domain on both sides, but fall back to expanding the
+	// ranger if Unmap fails (which it would for a discrete
+	// scale).
+	m := e.ticksFor.plotMargins
+	switch e.axis {
+	case 'x':
+		s.Ranger(NewFloatRanger(x+m.l, x+w-m.r))
+	case 'y':
+		s.Ranger(NewFloatRanger(y+h-m.b, y+m.t))
+	}
+	return mapMany(s, ticks).([]float64)
+}
+
+// computeTicks computes the location and labels of the ticks in
+// element e based on the dimensions of e.ticksFor (which must have
+// been laid out prior to calling this).
+func (e *eltTicks) computeTicks() {
+	const tickDistance = 30 // TODO: Theme. Min pixels between tick labels.
+
+	_, _, w, h := e.ticksFor.Layout()
+	var dim float64
+	switch e.axis {
+	case 'x':
+		dim = w
+	case 'y':
+		dim = h
+	}
+
+	// Compute max ticks assuming the labels are zero sized.
+	maxTicks := int(dim / tickDistance)
+
+	// Optimize ticks, keeping labels at least tickDistance apart.
+	e.ticks = make(map[Scaler]plotEltTicks)
+	for s := range e.scales() {
+		pred := func(ticks []float64, labels []string) bool {
+			if len(ticks) <= 1 {
+				return true
+			}
+			// Check distance between labels.
+			pos := e.mapTicks(s, ticks)
+			// Ticks are in value order, but we need them
+			// in position order.
+			sort.Float64s(pos)
+			var last float64
+			for i, p := range pos {
+				if i > 0 && p-last < tickDistance {
+					// Labels i-1 and i are too close.
+					return false
+				}
+				metrics := measureString(fontSize, labels[i])
+				switch e.axis {
+				case 'x':
+					last = p + metrics.width
+				case 'y':
+					last = p + metrics.leading
+				}
+			}
+
+			return true
+		}
+		major, _, labels := s.Ticks(maxTicks, pred)
+		e.ticks[s] = plotEltTicks{major, labels}
+	}
+}
+
 func (e *eltTicks) SizeHint() (w, h float64, flexw, flexh bool) {
-	if len(e.ticksFor.ticks) == 0 {
+	if len(e.ticks) == 0 {
 		// Ticks haven't been computed yet or there are none.
 		// Assume this takes up no space.
 		switch e.axis {
@@ -159,7 +228,7 @@ func (e *eltTicks) SizeHint() (w, h float64, flexw, flexh bool) {
 
 	var maxWidth, maxHeight float64
 	for s := range e.scales() {
-		for _, label := range e.ticksFor.ticks[s].labels {
+		for _, label := range e.ticks[s].labels {
 			metrics := measureString(fontSize, label)
 			maxHeight = math.Max(maxHeight, metrics.leading)
 			maxWidth = math.Max(maxWidth, metrics.width)
@@ -318,23 +387,28 @@ func addSubplotLabels(elts []plotElt) []plotElt {
 	// hierarchy of left-of/right-of/above/below relations, or we
 	// could make facets produce a total grid.
 	var prev *eltSubplot
+	var curTicks *eltTicks
 	sorter := newSubplotSorter(elts, 'x')
 	sort.Sort(sorter)
 	for _, elt := range sorter.elts {
 		if prev == nil || prev.subplot.y != elt.subplot.y || !eqScales(prev, elt, "y") {
 			// Show Y axis ticks.
-			elts = append(elts, newEltTicks('y', elt))
+			curTicks = newEltTicks('y', elt)
+			elts = append(elts, curTicks)
 		}
+		elt.yTicks = curTicks
 		prev = elt
 	}
 	sorter.dir = 'y'
 	sort.Sort(sorter)
-	prev = nil
+	prev, curTicks = nil, nil
 	for _, elt := range sorter.elts {
 		if prev == nil || prev.subplot.x != elt.subplot.x || !eqScales(prev, elt, "x") {
 			// Show X axis ticks.
-			elts = append(elts, newEltTicks('x', elt))
+			curTicks = newEltTicks('x', elt)
+			elts = append(elts, curTicks)
 		}
+		elt.xTicks = curTicks
 		prev = elt
 	}
 

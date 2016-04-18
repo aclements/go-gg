@@ -108,10 +108,7 @@ type Scaler interface {
 	// Output space is bad because I change the plot location in
 	// the course of layout. Currently it returns values in the
 	// input space or nil if ticks don't make sense.
-	//
-	// XXX Rather than exposing scale.TickOptions, maybe this
-	// should expose just max and predicate?
-	Ticks(o scale.TickOptions) (major, minor table.Slice, labels []string)
+	Ticks(max int, pred func(major []float64, labels []string) bool) (major, minor table.Slice, labels []string)
 
 	CloneScaler() Scaler
 }
@@ -217,8 +214,8 @@ func (s *defaultScale) Map(x interface{}) interface{} {
 	return s.ensure().Map(x)
 }
 
-func (s *defaultScale) Ticks(o scale.TickOptions) (major, minor table.Slice, labels []string) {
-	return s.ensure().Ticks(o)
+func (s *defaultScale) Ticks(max int, pred func(major []float64, labels []string) bool) (major, minor table.Slice, labels []string) {
+	return s.ensure().Ticks(max, pred)
 }
 
 func (s *defaultScale) CloneScaler() Scaler {
@@ -301,7 +298,7 @@ func (s *identityScale) RangeType() reflect.Type {
 func (s *identityScale) Ranger(r Ranger) Ranger        { return nil }
 func (s *identityScale) Map(x interface{}) interface{} { return x }
 
-func (s *identityScale) Ticks(o scale.TickOptions) (major, minor table.Slice, labels []string) {
+func (s *identityScale) Ticks(max int, pred func(major []float64, labels []string) bool) (major, minor table.Slice, labels []string) {
 	return nil, nil, nil
 }
 
@@ -437,10 +434,11 @@ func (s *linearScale) Map(x interface{}) interface{} {
 	}
 }
 
-func (s *linearScale) Ticks(o scale.TickOptions) (major, minor table.Slice, labels []string) {
+func (s *linearScale) Ticks(max int, pred func(major []float64, labels []string) bool) (major, minor table.Slice, labels []string) {
 	type Stringer interface {
 		String() string
 	}
+	o := scale.TickOptions{Max: max}
 
 	// If the domain type is integral, don't let the tick level go
 	// below 0. This is particularly important if the domain type
@@ -453,32 +451,38 @@ func (s *linearScale) Ticks(o scale.TickOptions) (major, minor table.Slice, labe
 		o.MinLevel, o.MaxLevel = 0, 1000
 	}
 
-	ls := s.get()
-	majorx, minorx := ls.Ticks(o)
-
-	// Compute labels.
-	//
-	// TODO: Custom label formats.
-	labels = make([]string, len(majorx))
-	if s.domainType != nil {
-		z := reflect.Zero(s.domainType).Interface()
-		if _, ok := z.(Stringer); ok {
-			// Convert the ticks back into the domain type
-			// and use its String method.
-			for i, x := range majorx {
-				v := reflect.ValueOf(x).Convert(s.domainType)
-				labels[i] = v.Interface().(Stringer).String()
+	mkLabels := func(major []float64) []string {
+		// Compute labels.
+		//
+		// TODO: Custom label formats.
+		labels = make([]string, len(major))
+		if s.domainType != nil {
+			z := reflect.Zero(s.domainType).Interface()
+			if _, ok := z.(Stringer); ok {
+				// Convert the ticks back into the domain type
+				// and use its String method.
+				for i, x := range major {
+					v := reflect.ValueOf(x).Convert(s.domainType)
+					labels[i] = v.Interface().(Stringer).String()
+				}
+				return labels
 			}
-			goto done
+		}
+		// Otherwise, just format them as floats.
+		for i, x := range major {
+			labels[i] = fmt.Sprintf("%g", x)
+		}
+		return labels
+	}
+	if pred != nil {
+		o.Pred = func(ticks []float64, level int) bool {
+			return pred(ticks, mkLabels(ticks))
 		}
 	}
-	// Otherwise, just format them as floats.
-	for i, x := range majorx {
-		labels[i] = fmt.Sprintf("%g", x)
-	}
 
-done:
-	return majorx, minorx, labels
+	ls := s.get()
+	majorx, minorx := ls.Ticks(o)
+	return majorx, minorx, mkLabels(majorx)
 }
 
 func (s *linearScale) CloneScaler() Scaler {
@@ -561,9 +565,11 @@ func (s *ordinalScale) Map(x interface{}) interface{} {
 	}
 }
 
-func (s *ordinalScale) Ticks(o scale.TickOptions) (major, minor table.Slice, labels []string) {
+func (s *ordinalScale) Ticks(max int, pred func(major []float64, labels []string) bool) (major, minor table.Slice, labels []string) {
 	// TODO: Return *no* ticks and only labels. Can't currently
 	// express this.
+
+	// TODO: Honor constraints.
 
 	s.makeIndex()
 	labels = make([]string, len(s.index))

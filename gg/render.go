@@ -13,7 +13,6 @@ import (
 
 	"github.com/aclements/go-gg/generic"
 	"github.com/aclements/go-gg/table"
-	"github.com/aclements/go-moremath/scale"
 	"github.com/ajstarks/svgo"
 )
 
@@ -180,45 +179,12 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 	//
 	// 1) Lay out the graphs without ticks.
 	layout.SetLayout(0, 0, float64(width), float64(height))
-	// 2) Compute the number of ticks and tick labels.
-	const tickDistance = 50 // TODO: Theme. Min pixels between ticks.
+	// 2) Compute the number of ticks and tick labels for each
+	// tick element.
 	for _, elt := range plotElts {
-		elt, ok := elt.(*eltSubplot)
-		if !ok {
-			continue
+		if elt, ok := elt.(*eltTicks); ok {
+			elt.computeTicks()
 		}
-
-		_, _, w, h := elt.Layout()
-		genTicks := func(aes string, size float64) {
-			for s := range elt.scales[aes] {
-				// TODO: A fixed pixel distance is a
-				// bad idea if the font size changes
-				// or the labels are long. Ideally we
-				// would set the minimum distance
-				// *between* labels. This might
-				// require hooking in to the tick
-				// level optimizer.
-				//
-				// The underlying scales could expose
-				// the tick "generator" function for
-				// that type of scale and there could
-				// be a generic optimizer algorithm
-				// that takes a predicate.
-				//
-				// The minimum distance between the
-				// labels would also balance X and Y
-				// better, since you can pack more
-				// ticks into the Y axis.
-				nTicks := int(size / tickDistance)
-				if nTicks < 1 {
-					nTicks = 1
-				}
-				major, _, labels := s.Ticks(scale.TickOptions{Max: nTicks})
-				elt.addTicks(s, major, labels)
-			}
-		}
-		genTicks("x", w)
-		genTicks("y", h)
 	}
 	// 3) Re-layout the plot and stick with the ticks we computed.
 	layout.SetLayout(0, 0, float64(width), float64(height))
@@ -253,10 +219,10 @@ func (e *eltSubplot) render(svg *svg.SVG) {
 	// Render grid.
 	renderBackground(svg, x, y, w, h)
 	for s := range e.scales["x"] {
-		renderGrid(svg, 'x', s, e.ticks[s], y, y+h)
+		renderGrid(svg, 'x', s, e.xTicks.ticks[s], y, y+h)
 	}
 	for s := range e.scales["y"] {
-		renderGrid(svg, 'y', s, e.ticks[s], x, x+w)
+		renderGrid(svg, 'y', s, e.yTicks.ticks[s], x, x+w)
 	}
 
 	// Create rendering environment.
@@ -286,10 +252,10 @@ func (e *eltSubplot) render(svg *svg.SVG) {
 
 	// Render scale ticks.
 	for s := range e.scales["x"] {
-		renderScale(svg, 'x', s, e.ticks[s], y+h)
+		renderScale(svg, 'x', s, e.xTicks.ticks[s], y+h)
 	}
 	for s := range e.scales["y"] {
-		renderScale(svg, 'y', s, e.ticks[s], x)
+		renderScale(svg, 'y', s, e.yTicks.ticks[s], x)
 	}
 }
 
@@ -346,27 +312,10 @@ func renderScale(svg *svg.SVG, dir rune, scale Scaler, ticks plotEltTicks, pos f
 }
 
 func (e *eltTicks) render(svg *svg.SVG) {
-	x, y, w, h := e.Layout()
-	// TODO: This doesn't show ticks in the margin area. This may
-	// be fine with niced tick labels, but it tends to look bad
-	// with un-niced ticks. Ideally we would expand the input
-	// domain instead, but this isn't well-defined for discrete
-	// scales. We could use Unmap to try to find the expanded
-	// input domain on both sides, but fall back to expanding the
-	// ranger if Unmap fails (which it would for a discrete
-	// scale).
-	m := e.ticksFor.plotMargins
-	xRanger := NewFloatRanger(x+m.l, x+w-m.r)
-	yRanger := NewFloatRanger(y+h-m.b, y+m.t)
+	x, y, w, _ := e.Layout()
 	for s := range e.scales() {
-		ticks := e.ticksFor.ticks[s]
-		if e.axis == 'x' {
-			s.Ranger(xRanger)
-		} else {
-			s.Ranger(yRanger)
-		}
-		pos := mapMany(s, ticks.major).([]float64)
-		for i, label := range ticks.labels {
+		pos := e.mapTicks(s, e.ticks[s].major)
+		for i, label := range e.ticks[s].labels {
 			tick := pos[i]
 			if e.axis == 'x' {
 				svg.Text(int(tick), int(y+xTickSep), label, `text-anchor="middle" dy="1em" fill="#666"`) // TODO: Theme.
