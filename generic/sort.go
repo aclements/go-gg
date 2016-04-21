@@ -9,6 +9,14 @@ import (
 	"sort"
 )
 
+// CanSort returns whether the value v can be sorted.
+func CanSort(v interface{}) bool {
+	if _, ok := v.(sort.Interface); ok {
+		return true
+	}
+	return CanOrderR(reflect.TypeOf(v).Elem().Kind())
+}
+
 // Sort sorts v in increasing order. v must implement sort.Interface
 // or must be a slice, array, or pointer to array whose element type
 // is orderable.
