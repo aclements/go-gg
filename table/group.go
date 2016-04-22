@@ -81,19 +81,22 @@ func GroupBy(g Grouping, cols ...string) Grouping {
 	// and then cut that up into the groups so that it's one
 	// allocation per column regardless of how many groups there
 	// are.
+	//
+	// TODO: This spends a lot of time and garbage in table.Add
+	// (mostly table.cloneSans).
 
 	if len(cols) == 0 {
 		return g
 	}
 
-	out := Grouping(new(Table))
+	out := new(groupedTable)
 	for _, gid := range g.Tables() {
 		t := g.Table(gid)
 
 		if cv, ok := t.Const(cols[0]); ok {
 			// Grouping by a constant is trivial.
 			subgid := gid.Extend(cv)
-			out = out.AddTable(subgid, t)
+			out.addTableUpdate(subgid, t)
 			continue
 		}
 
@@ -141,7 +144,7 @@ func GroupBy(g Grouping, cols ...string) Grouping {
 				seq = generic.MultiIndex(seq, rows)
 				subtable = subtable.Add(name, seq)
 			}
-			out = out.AddTable(subgroup.gid, subtable)
+			out.addTableUpdate(subgroup.gid, subtable)
 		}
 	}
 

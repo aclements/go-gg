@@ -386,3 +386,23 @@ func (g *groupedTable) AddTable(gid GroupID, t *Table) Grouping {
 	ng.groups = append(ng.groups, gid)
 	return ng
 }
+
+// addTableUpdate adds table t to g by mutation. It assumes that the
+// column structure matches. This is meant for internal use only.
+//
+// TODO: It would be nice if external users could achieve similar
+// asymptotic performance safely. There could be a GroupBuilder API
+// that does this and then freezes into a Grouped.
+func (g *groupedTable) addTableUpdate(gid GroupID, t *Table) {
+	if len(g.groups) == 0 {
+		g.tables = map[GroupID]*Table{gid: t}
+		g.groups = []GroupID{gid}
+		g.colNames = t.Columns()
+		return
+	}
+
+	if _, ok := g.tables[gid]; !ok {
+		g.groups = append(g.groups, gid)
+	}
+	g.tables[gid] = t
+}
