@@ -54,6 +54,10 @@ func SortBy(g Grouping, cols ...string) Grouping {
 		// Permute all columns.
 		nt := new(Table)
 		for _, name := range t.Columns() {
+			if cv, ok := t.Const(name); ok {
+				nt = nt.AddConst(name, cv)
+				continue
+			}
 			seq := t.Column(name)
 			seq = generic.MultiIndex(seq, perm)
 			nt = nt.Add(name, seq)
