@@ -297,3 +297,19 @@ type axisLabel struct {
 func (a axisLabel) Apply(p *Plot) {
 	p.axisLabels[a.axis] = a.label
 }
+
+// A Stat transforms a table.Grouping.
+type Stat interface {
+	F(table.Grouping) table.Grouping
+}
+
+// Stat applies each of stats in order to p's data.
+//
+// TODO: Perform scale transforms before applying stats.
+func (p *Plot) Stat(stats ...Stat) *Plot {
+	data := p.Data()
+	for _, stat := range stats {
+		data = stat.F(data)
+	}
+	return p.SetData(data)
+}
