@@ -91,7 +91,8 @@ func AggCount(label string) Aggregator {
 }
 
 // AggMean returns an aggregate function that computes the mean of
-// each of cols. The resulting columns will be named "mean <col>".
+// each of cols. The resulting columns will be named "mean <col>" and
+// will have the same type as <col>.
 func AggMean(cols ...string) Aggregator {
 	ocols := make([]string, len(cols))
 	for i, col := range cols {
@@ -103,12 +104,24 @@ func AggMean(cols ...string) Aggregator {
 			means := make([]float64, 0, len(input.Tables()))
 
 			var xs []float64
-			for _, gid := range input.Tables() {
-				generic.ConvertSlice(&xs, input.Table(gid).MustColumn(col))
+			var ct reflect.Type
+			for i, gid := range input.Tables() {
+				v := input.Table(gid).MustColumn(col)
+				if i == 0 {
+					ct = reflect.TypeOf(v)
+				}
+				generic.ConvertSlice(&xs, v)
 				means = append(means, stats.Mean(xs))
 			}
 
-			b.Add(ocols[coli], means)
+			if ct == float64SliceType {
+				b.Add(ocols[coli], means)
+			} else {
+				// Convert means back to the type of col.
+				outptr := reflect.New(ct)
+				generic.ConvertSlice(outptr.Interface(), means)
+				b.Add(ocols[coli], outptr.Elem().Interface())
+			}
 		}
 	}
 }
