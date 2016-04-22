@@ -32,8 +32,6 @@ import (
 //
 // Rename Table to T?
 //
-// Make Add replace column in place?
-//
 // Require same columns sequence for adding a table?
 //
 // Make Table an interface? Then columns could be constructed lazily.
@@ -138,9 +136,8 @@ func reflectSlice(s Slice) reflect.Value {
 
 // Add returns a new Table with a new column bound to data, or removes
 // the named column if data is nil. If Table t already has a column
-// with the given name, Add first removes it. Then, if data is
-// non-nil, Add adds a new column. If data is non-nil, it must have
-// the same length as any existing columns or Add will panic.
+// with the given name, Add replaces it. If data is non-nil, it must
+// have the same length as any existing columns or Add will panic.
 //
 // TODO: "Add" suggests mutation. Should this be called "Plus"?
 func (t *Table) Add(name string, data Slice) *Table {
@@ -162,15 +159,11 @@ func (t *Table) Add(name string, data Slice) *Table {
 			// an empty table.
 			return &Table{}
 		}
+		return t.clone(name, false)
 	}
 
-	// Create the new table, removing any existing column with the
-	// same name.
-	nt := t.cloneSans(name)
-	if data == nil {
-		return nt
-	}
-
+	// Create the new table.
+	nt := t.clone(name, true)
 	rv := reflectSlice(data)
 	dataLen := rv.Len()
 	if len(nt.cols) == 0 {
@@ -182,31 +175,32 @@ func (t *Table) Add(name string, data Slice) *Table {
 	} else {
 		nt.cols[name] = data
 	}
-	nt.colNames = append(nt.colNames, name)
 
 	return nt
 }
 
 // AddConst returns a new Table with a new constant column whose value
 // is val. If Table t already has a column with this name, AddConst
-// first removes it.
+// replaces it.
 //
 // A constant column has the same value in every row of the Table. It
 // does not itself have an inherent length.
 func (t *Table) AddConst(name string, val interface{}) *Table {
 	// Clone and remove any existing column with the same name.
-	nt := t.cloneSans(name)
+	nt := t.clone(name, true)
 	nt.consts[name] = val
-	nt.colNames = append(nt.colNames, name)
 	return nt
 }
 
-// cloneSans returns a clone of t without column name.
-func (t *Table) cloneSans(name string) *Table {
-	// Create the new table, removing any existing column with the
-	// same name.
+// clone returns a clone of t. Column name will always be removed from
+// cols and consts. If add is true, name will be added to colNames. If
+// add is false, name will be removed from colNames.
+func (t *Table) clone(name string, add bool) *Table {
+	// Create the new table.
 	nt := &Table{make(map[string]Slice), make(map[string]interface{}), []string{}, t.len}
+	found := false
 	for _, name2 := range t.colNames {
+		// Always remove the column from cols and consts.
 		if name != name2 {
 			if c, ok := t.cols[name2]; ok {
 				nt.cols[name2] = c
@@ -215,7 +209,17 @@ func (t *Table) cloneSans(name string) *Table {
 				nt.consts[name2] = cv
 			}
 			nt.colNames = append(nt.colNames, name2)
+		} else {
+			if add {
+				// Keep the column name.
+				nt.colNames = append(nt.colNames, name)
+			}
+			found = true
 		}
+	}
+	if add && !found {
+		// Add the column name.
+		nt.colNames = append(nt.colNames, name)
 	}
 	return nt
 }

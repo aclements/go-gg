@@ -269,10 +269,9 @@ func TestColumnOrder(t *testing.T) {
 		}
 	}
 
-	// Test that re-adding a column moves it to the end.
-	// TODO: This may not be the behavior we want.
+	// Test that re-adding a column keeps it in place.
 	tab := new(Table).Add("a", []int{}).Add("b", []int{}).Add("a", []int{})
-	if want := []string{"b", "a"}; !de(want, tab.Columns()) {
+	if want := []string{"a", "b"}; !de(want, tab.Columns()) {
 		t.Fatalf("want %v; got %v", want, tab.Columns())
 	}
 }
