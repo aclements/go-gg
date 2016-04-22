@@ -47,7 +47,7 @@ func shouldPanic(t *testing.T, re string, f func()) {
 		if err == nil {
 			t.Fatalf("want panic matching %q; got no panic", re)
 		} else if !r.MatchString(fmt.Sprintf("%s", err)) {
-			t.Fatalf("want panic matching %q; got %s", re, err)
+			t.Fatalf("panic %q does not match %q", err, re)
 		}
 	}()
 	f()
@@ -204,10 +204,10 @@ func TestAddTable(t *testing.T) {
 	if v := tab0.AddTable(RootGroupID, tabY); !equal(tabY, v) {
 		t.Fatalf("tab0.AddTable(RootGroupID, tabY) should be %v; got %v", tab0, v)
 	}
-	shouldPanic(t, "table missing column \"x\"", func() {
+	shouldPanic(t, `table columns \["y"\] do not match group columns \["x"\]`, func() {
 		tab0.AddTable(xgid, tabY)
 	})
-	shouldPanic(t, "table has extra column \"y\"", func() {
+	shouldPanic(t, `table columns \["x" "y"\] do not match group columns \["x"\]`, func() {
 		tab0.AddTable(xgid, tabXY)
 	})
 

@@ -32,8 +32,6 @@ import (
 //
 // Rename Table to T?
 //
-// Require same columns sequence for adding a table?
-//
 // Make Table an interface? Then columns could be constructed lazily.
 //
 // Have separate builder/viewer APIs?
@@ -99,13 +97,8 @@ type Grouping interface {
 	// with group gid removed. If t is the empty Table, this is a
 	// no-op because the empty Table contains no groups. If gid
 	// already exists, AddTable replaces it. Table t must have the
-	// same set of columns as any existing Tables in this group
-	// and they must have identical types; otherwise, AddTable
-	// will panic.
-	//
-	// TODO The same set or the same sequence of columns? Given
-	// that I never use the sequence (except maybe for printing),
-	// perhaps it doesn't matter.
+	// same columns as any existing Tables in this group and they
+	// must have identical types; otherwise, AddTable will panic.
 	//
 	// TODO This doesn't make it easy to combine two Groupings. It
 	// could instead take a Grouping and reparent it.
@@ -367,7 +360,23 @@ func (g *groupedTable) AddTable(gid GroupID, t *Table) Grouping {
 		return ng
 	}
 
-	// Check that t's column structure matches.
+	// Check that t's column names match.
+	matches := true
+	if len(t.colNames) != len(ng.colNames) {
+		matches = false
+	} else {
+		for i, n := range t.colNames {
+			if ng.colNames[i] != n {
+				matches = false
+				break
+			}
+		}
+	}
+	if !matches {
+		panic(fmt.Sprintf("table columns %q do not match group columns %q", t.colNames, ng.colNames))
+	}
+
+	// Check that t's column types match.
 	tBase := ng.tables[ng.groups[0]]
 	for _, col := range ng.colNames {
 		var t0, t1 reflect.Type
@@ -380,23 +389,9 @@ func (g *groupedTable) AddTable(gid GroupID, t *Table) Grouping {
 			t1 = reflect.TypeOf(c).Elem()
 		} else if cv, ok := t.consts[col]; ok {
 			t1 = reflect.TypeOf(cv)
-		} else {
-			panic(fmt.Sprintf("table missing column %q", col))
 		}
 		if t0 != t1 {
 			panic(&generic.TypeError{t0, t1, fmt.Sprintf("for column %q are not the same", col)})
-		}
-	}
-	if len(t.cols) != len(ng.colNames) {
-		// t has a column the group doesn't.
-		colSet := map[string]bool{}
-		for _, col := range ng.colNames {
-			colSet[col] = true
-		}
-		for col := range t.cols {
-			if !colSet[col] {
-				panic(fmt.Sprintf("table has extra column %q", col))
-			}
 		}
 	}
 
