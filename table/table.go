@@ -16,9 +16,9 @@
 // groups. Most operations take a Grouping and operate on each group
 // independently, though some operations sub-divide or combine groups.
 //
-// The structures of both Tables and Groupings are immutable. Adding a
-// column to a Table returns a new Table and adding a new Table to a
-// Grouping returns a new Grouping.
+// The structures of both Tables and Groupings are immutable. They are
+// constructed using a Builder or a GroupingBuilder, respectively, and
+// then "frozen" into their respective immutable data structures.
 package table
 
 import (
@@ -33,13 +33,11 @@ import (
 // Rename Table to T?
 //
 // Make Table an interface? Then columns could be constructed lazily.
-//
-// Have separate builder/viewer APIs?
 
-// A Table is an ordered two dimensional relation. It consists of a
-// set of named columns. Each column is a sequence of values of a
-// consistent type or a constant value. All (non-constant) columns
-// have the same length.
+// A Table is an immutable, ordered two dimensional relation. It
+// consists of a set of named columns. Each column is a sequence of
+// values of a consistent type or a constant value. All (non-constant)
+// columns have the same length.
 //
 // The zero value of Table is the "empty table": it has no rows and no
 // columns. Note that a Table may have one or more columns, but no
@@ -48,9 +46,6 @@ import (
 // A Table is also a trivial Grouping. If a Table is empty, it has no
 // groups and hence the zero value of Table is also the "empty group".
 // Otherwise, it consists only of the root group, RootGroupID.
-//
-// A Table's structure is immutable. To construct a Table, start with
-// an empty table and add columns to it using Add.
 type Table struct {
 	cols     map[string]Slice
 	consts   map[string]interface{}
@@ -58,8 +53,15 @@ type Table struct {
 	len      int
 }
 
-// A Grouping is a set of tables with identical sets of columns, each
-// identified by a distinct GroupID.
+// A Builder constructs a Table one column at a time.
+//
+// The zero value of a Builder represents an empty Table.
+type Builder struct {
+	t Table
+}
+
+// A Grouping is an immutable set of tables with identical sets of
+// columns, each identified by a distinct GroupID.
 //
 // Visually, a Grouping can be thought of as follows:
 //
@@ -71,8 +73,7 @@ type Table struct {
 //	0   9.3    "a"     10
 //
 // Like a Table, a Grouping's structure is immutable. To construct a
-// Grouping, start with a Table (typically the empty Table, which is
-// also the empty Grouping) and add tables to it using AddTable.
+// Grouping, use a GroupingBuilder.
 //
 // Despite the fact that GroupIDs form a hierarchy, a Grouping ignores
 // this hierarchy and simply operates on a flat map of distinct
@@ -91,18 +92,15 @@ type Grouping interface {
 	// Table returns the Table in group gid, or nil if there is no
 	// such Table.
 	Table(gid GroupID) *Table
+}
 
-	// AddTable returns a new Grouping with the addition of Table
-	// t bound to group gid. If t is nil, it returns a Grouping
-	// with group gid removed. If t is the empty Table, this is a
-	// no-op because the empty Table contains no groups. If gid
-	// already exists, AddTable replaces it. Table t must have the
-	// same columns as any existing Tables in this group and they
-	// must have identical types; otherwise, AddTable will panic.
-	//
-	// TODO This doesn't make it easy to combine two Groupings. It
-	// could instead take a Grouping and reparent it.
-	AddTable(gid GroupID, t *Table) Grouping
+// A GroupingBuilder constructs a Grouping one table a time.
+//
+// The zero value of a GroupingBuilder represents an empty Grouping
+// with no tables and no columns.
+type GroupingBuilder struct {
+	g        groupedTable
+	colTypes []reflect.Type
 }
 
 type groupedTable struct {
@@ -126,94 +124,131 @@ func reflectSlice(s Slice) reflect.Value {
 	return rv
 }
 
-// Add returns a new Table with a new column bound to data, or removes
-// the named column if data is nil. If Table t already has a column
-// with the given name, Add replaces it. If data is non-nil, it must
-// have the same length as any existing columns or Add will panic.
-//
-// TODO: "Add" suggests mutation. Should this be called "Plus"?
-func (t *Table) Add(name string, data Slice) *Table {
-	// TODO: Currently adding N columns is O(N^2). If we built the
-	// column index only when it was asked for, the usual case of
-	// adding a bunch of columns and then using the final table
-	// would be O(N).
-
-	if data == nil {
-		// Remove the column.
-		if _, ok := t.cols[name]; !ok {
-			if _, ok := t.consts[name]; !ok {
-				// Nothing to remove.
-				return t
-			}
-		}
-		if len(t.colNames) == 1 {
-			// We're removing the only column. This is now
-			// an empty table.
-			return &Table{}
-		}
-		return t.clone(name, false)
+// NewBuilder returns a new Builder. If t is non-nil, it populates the
+// new Builder with the columns from t.
+func NewBuilder(t *Table) *Builder {
+	if t == nil {
+		return new(Builder)
 	}
-
-	// Create the new table.
-	nt := t.clone(name, true)
-	rv := reflectSlice(data)
-	dataLen := rv.Len()
-	if len(nt.cols) == 0 {
-		// First non-constant column.
-		nt.cols[name] = data
-		nt.len = dataLen
-	} else if nt.len != dataLen {
-		panic(fmt.Sprintf("cannot add column %q with %d elements to table with %d rows", name, dataLen, nt.len))
-	} else {
-		nt.cols[name] = data
+	b := Builder{Table{
+		cols:     make(map[string]Slice),
+		consts:   make(map[string]interface{}),
+		colNames: append([]string(nil), t.Columns()...),
+		len:      t.len,
+	}}
+	for k, v := range t.cols {
+		b.t.cols[k] = v
 	}
-
-	return nt
+	for k, v := range t.consts {
+		b.t.consts[k] = v
+	}
+	return &b
 }
 
-// AddConst returns a new Table with a new constant column whose value
-// is val. If Table t already has a column with this name, AddConst
-// replaces it.
+// Add adds a column to b, or removes the named column if data is nil.
+// If b already has a column with the given name, Add replaces it. If
+// data is non-nil, it must have the same length as any existing
+// columns or Add will panic.
+func (b *Builder) Add(name string, data Slice) *Builder {
+	if data == nil {
+		// Remove the column.
+		if _, ok := b.t.cols[name]; !ok {
+			if _, ok := b.t.consts[name]; !ok {
+				// Nothing to remove.
+				return b
+			}
+		}
+		delete(b.t.cols, name)
+		delete(b.t.consts, name)
+		for i, n := range b.t.colNames {
+			if n == name {
+				copy(b.t.colNames[i:], b.t.colNames[i+1:])
+				b.t.colNames = b.t.colNames[:len(b.t.colNames)-1]
+				break
+			}
+		}
+		return b
+	}
+
+	// Are we replacing an existing column?
+	_, replace := b.t.cols[name]
+	if !replace {
+		_, replace = b.t.consts[name]
+	}
+
+	// Check the column and add it.
+	rv := reflectSlice(data)
+	dataLen := rv.Len()
+	if len(b.t.cols) == 0 || (replace && len(b.t.cols) == 1) {
+		if b.t.cols == nil {
+			b.t.cols = make(map[string]Slice)
+		}
+		// First non-constant column (possibly replacing the
+		// only non-constant column).
+		b.t.cols[name] = data
+		b.t.len = dataLen
+	} else if b.t.len != dataLen {
+		panic(fmt.Sprintf("cannot add column %q with %d elements to table with %d rows", name, dataLen, b.t.len))
+	} else {
+		b.t.cols[name] = data
+	}
+
+	if replace {
+		// Make sure it's not in constants.
+		delete(b.t.consts, name)
+	} else {
+		b.t.colNames = append(b.t.colNames, name)
+	}
+
+	return b
+}
+
+// AddConst adds a constant column to b whose value is val. If b
+// already has a column with this name, AddConst replaces it.
 //
 // A constant column has the same value in every row of the Table. It
 // does not itself have an inherent length.
-func (t *Table) AddConst(name string, val interface{}) *Table {
-	// Clone and remove any existing column with the same name.
-	nt := t.clone(name, true)
-	nt.consts[name] = val
-	return nt
+func (b *Builder) AddConst(name string, val interface{}) *Builder {
+	// Are we replacing an existing column?
+	_, replace := b.t.cols[name]
+	if !replace {
+		_, replace = b.t.consts[name]
+	}
+
+	if b.t.consts == nil {
+		b.t.consts = make(map[string]interface{})
+	}
+	b.t.consts[name] = val
+
+	if replace {
+		// Make sure it's not in cols.
+		delete(b.t.cols, name)
+	} else {
+		b.t.colNames = append(b.t.colNames, name)
+	}
+
+	return b
 }
 
-// clone returns a clone of t. Column name will always be removed from
-// cols and consts. If add is true, name will be added to colNames. If
-// add is false, name will be removed from colNames.
-func (t *Table) clone(name string, add bool) *Table {
-	// Create the new table.
-	nt := &Table{make(map[string]Slice), make(map[string]interface{}), []string{}, t.len}
-	found := false
-	for _, name2 := range t.colNames {
-		// Always remove the column from cols and consts.
-		if name != name2 {
-			if c, ok := t.cols[name2]; ok {
-				nt.cols[name2] = c
-			}
-			if cv, ok := t.consts[name2]; ok {
-				nt.consts[name2] = cv
-			}
-			nt.colNames = append(nt.colNames, name2)
-		} else {
-			if add {
-				// Keep the column name.
-				nt.colNames = append(nt.colNames, name)
-			}
-			found = true
-		}
+// Has returns true if b has a column named "name".
+func (b *Builder) Has(name string) bool {
+	if _, ok := b.t.cols[name]; ok {
+		return true
 	}
-	if add && !found {
-		// Add the column name.
-		nt.colNames = append(nt.colNames, name)
+	if _, ok := b.t.consts[name]; ok {
+		return true
 	}
-	return nt
+	return false
+}
+
+// Done returns the constructed Table and resets b.
+func (b *Builder) Done() *Table {
+	if len(b.t.colNames) == 0 {
+		return new(Table)
+	}
+	t := b.t
+	b.t = Table{}
+	return &t
 }
 
 // Len returns the number of rows in Table t.
@@ -288,30 +323,131 @@ func (t *Table) Table(gid GroupID) *Table {
 	return nil
 }
 
-// AddTable returns a Grouping with up to two groups: first, t, if
-// non-empty, is bound to RootGroupID; then t2, if non-empty, is bound
-// to group gid.
-//
-// Typically this is used to build up a Grouping by starting with an
-// empty Table and adding Tables to it.
-func (t *Table) AddTable(gid GroupID, t2 *Table) Grouping {
-	if t2 == nil {
-		if gid == RootGroupID {
-			return new(Table)
+// NewGroupingBuilder returns a new GroupingBuilder. If g is non-nil,
+// it populates the new GroupingBuilder with the tables from g.
+func NewGroupingBuilder(g Grouping) *GroupingBuilder {
+	if g == nil {
+		return new(GroupingBuilder)
+	}
+	b := GroupingBuilder{groupedTable{
+		tables:   make(map[GroupID]*Table),
+		groups:   append([]GroupID(nil), g.Tables()...),
+		colNames: append([]string(nil), g.Columns()...),
+	}, nil}
+	for _, gid := range g.Tables() {
+		t := g.Table(gid)
+		b.g.tables[gid] = t
+		if b.colTypes == nil {
+			b.colTypes = colTypes(t)
 		}
-		return t
-	} else if t2.isEmpty() {
-		return t
-	} else if gid == RootGroupID {
-		return t2
+	}
+	return &b
+}
+
+func colTypes(t *Table) []reflect.Type {
+	colTypes := make([]reflect.Type, len(t.colNames))
+	for i, col := range t.colNames {
+		if c, ok := t.cols[col]; ok {
+			colTypes[i] = reflect.TypeOf(c).Elem()
+		} else {
+			colTypes[i] = reflect.TypeOf(t.consts[col])
+		}
+	}
+	return colTypes
+}
+
+// Add adds a Table to b, or removes a table if t is nil. If t is the
+// empty Table, this is a no-op because the empty Table contains no
+// groups. If gid already exists, Add replaces it. Table t must have
+// the same columns as any existing Tables in this Grouping and they
+// must have identical types; otherwise, Add will panic.
+//
+// TODO This doesn't make it easy to combine two Groupings. It could
+// instead take a Grouping and reparent it.
+func (b *GroupingBuilder) Add(gid GroupID, t *Table) *GroupingBuilder {
+	if t == nil {
+		if _, ok := b.g.tables[gid]; !ok {
+			// Nothing to remove.
+			return b
+		}
+		delete(b.g.tables, gid)
+		for i, g2 := range b.g.groups {
+			if g2 == gid {
+				copy(b.g.groups[i:], b.g.groups[i+1:])
+				b.g.groups = b.g.groups[:len(b.g.groups)-1]
+				break
+			}
+		}
+		return b
 	}
 
-	g := &groupedTable{
-		tables:   map[GroupID]*Table{},
-		groups:   []GroupID{},
-		colNames: nil,
+	if t != nil && t.isEmpty() {
+		// Adding an empty table has no effect.
+		return b
 	}
-	return g.AddTable(RootGroupID, t).AddTable(gid, t2)
+
+	if len(b.g.groups) == 1 && b.g.groups[0] == gid {
+		// We're replacing the only group. This is allowed to
+		// change the shape of the Grouping.
+		b.g.tables[gid] = t
+		b.g.colNames = t.Columns()
+		b.colTypes = colTypes(t)
+		return b
+	} else if len(b.g.groups) == 0 {
+		b.g.tables = map[GroupID]*Table{gid: t}
+		b.g.groups = []GroupID{gid}
+		b.g.colNames = t.Columns()
+		b.colTypes = colTypes(t)
+		return b
+	}
+
+	// Check that t's column names match.
+	matches := true
+	if len(t.colNames) != len(b.g.colNames) {
+		matches = false
+	} else {
+		for i, n := range t.colNames {
+			if b.g.colNames[i] != n {
+				matches = false
+				break
+			}
+		}
+	}
+	if !matches {
+		panic(fmt.Sprintf("table columns %q do not match group columns %q", t.colNames, b.g.colNames))
+	}
+
+	// Check that t's column types match.
+	for i, col := range b.g.colNames {
+		t0 := b.colTypes[i]
+		var t1 reflect.Type
+		if c, ok := t.cols[col]; ok {
+			t1 = reflect.TypeOf(c).Elem()
+		} else if cv, ok := t.consts[col]; ok {
+			t1 = reflect.TypeOf(cv)
+		}
+		if t0 != t1 {
+			panic(&generic.TypeError{t0, t1, fmt.Sprintf("for column %q are not the same", col)})
+		}
+	}
+
+	// Add t.
+	if _, ok := b.g.tables[gid]; !ok {
+		b.g.groups = append(b.g.groups, gid)
+	}
+	b.g.tables[gid] = t
+
+	return b
+}
+
+// Done returns the constructed Grouping and resets b.
+func (b *GroupingBuilder) Done() Grouping {
+	if len(b.g.groups) == 0 {
+		return new(groupedTable)
+	}
+	g := b.g
+	b.g = groupedTable{}
+	return &g
 }
 
 func (g *groupedTable) Columns() []string {
@@ -324,101 +460,4 @@ func (g *groupedTable) Tables() []GroupID {
 
 func (g *groupedTable) Table(gid GroupID) *Table {
 	return g.tables[gid]
-}
-
-func (g *groupedTable) AddTable(gid GroupID, t *Table) Grouping {
-	// TODO: Currently adding N tables is O(N^2).
-
-	if t != nil && t.isEmpty() {
-		// Adding an empty table has no effect.
-		return g
-	}
-
-	// Create the new grouped table, removing any existing table
-	// with the same GID.
-	ng := &groupedTable{map[GroupID]*Table{}, []GroupID{}, g.colNames}
-	for _, gid2 := range g.groups {
-		if gid == gid2 && t == nil {
-			// Omit this Table.
-			continue
-		} else {
-			ng.tables[gid2] = g.tables[gid2]
-			ng.groups = append(ng.groups, gid2)
-		}
-	}
-	if t == nil {
-		if len(ng.groups) == 0 {
-			ng.colNames = nil
-		}
-		return ng
-	}
-
-	if len(ng.groups) == 0 {
-		ng.tables[gid] = t
-		ng.groups = append(ng.groups, gid)
-		ng.colNames = t.Columns()
-		return ng
-	}
-
-	// Check that t's column names match.
-	matches := true
-	if len(t.colNames) != len(ng.colNames) {
-		matches = false
-	} else {
-		for i, n := range t.colNames {
-			if ng.colNames[i] != n {
-				matches = false
-				break
-			}
-		}
-	}
-	if !matches {
-		panic(fmt.Sprintf("table columns %q do not match group columns %q", t.colNames, ng.colNames))
-	}
-
-	// Check that t's column types match.
-	tBase := ng.tables[ng.groups[0]]
-	for _, col := range ng.colNames {
-		var t0, t1 reflect.Type
-		if c, ok := tBase.cols[col]; ok {
-			t0 = reflect.TypeOf(c).Elem()
-		} else {
-			t0 = reflect.TypeOf(tBase.consts[col])
-		}
-		if c, ok := t.cols[col]; ok {
-			t1 = reflect.TypeOf(c).Elem()
-		} else if cv, ok := t.consts[col]; ok {
-			t1 = reflect.TypeOf(cv)
-		}
-		if t0 != t1 {
-			panic(&generic.TypeError{t0, t1, fmt.Sprintf("for column %q are not the same", col)})
-		}
-	}
-
-	_, have := ng.tables[gid]
-	ng.tables[gid] = t
-	if !have {
-		ng.groups = append(ng.groups, gid)
-	}
-	return ng
-}
-
-// addTableUpdate adds table t to g by mutation. It assumes that the
-// column structure matches. This is meant for internal use only.
-//
-// TODO: It would be nice if external users could achieve similar
-// asymptotic performance safely. There could be a GroupBuilder API
-// that does this and then freezes into a Grouped.
-func (g *groupedTable) addTableUpdate(gid GroupID, t *Table) {
-	if len(g.groups) == 0 {
-		g.tables = map[GroupID]*Table{gid: t}
-		g.groups = []GroupID{gid}
-		g.colNames = t.Columns()
-		return
-	}
-
-	if _, ok := g.tables[gid]; !ok {
-		g.groups = append(g.groups, gid)
-	}
-	g.tables[gid] = t
 }

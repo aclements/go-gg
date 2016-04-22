@@ -46,7 +46,7 @@ type Aggregate struct {
 // An Aggregator is a function that aggregates each group of input
 // into one row and adds it to output. It may be based on multiple
 // columns from input and may add multiple columns to output.
-type Aggregator func(input table.Grouping, output *table.Table) *table.Table
+type Aggregator func(input table.Grouping, output *table.Builder)
 
 func (s Aggregate) F(g table.Grouping) table.Grouping {
 	return table.MapTables(func(_ table.GroupID, t *table.Table) *table.Table {
@@ -60,15 +60,16 @@ func (s Aggregate) F(g table.Grouping) table.Grouping {
 		}
 
 		// Start new table.
-		nt := new(table.Table).Add(s.X, xs.Interface())
+		nt := new(table.Builder).Add(s.X, xs.Interface())
 
 		// Apply Aggregators.
 		for _, agg := range s.Aggregators {
-			nt = agg(g, nt)
+			agg(g, nt)
 		}
 
 		// Keep constant columns.
-		return preserveConsts(nt, t)
+		preserveConsts(nt, t)
+		return nt.Done()
 	}, g)
 }
 
@@ -80,12 +81,12 @@ func AggCount(label string) Aggregator {
 		label = "count"
 	}
 
-	return func(input table.Grouping, t *table.Table) *table.Table {
+	return func(input table.Grouping, b *table.Builder) {
 		counts := make([]int, 0, len(input.Tables()))
 		for _, gid := range input.Tables() {
 			counts = append(counts, input.Table(gid).Len())
 		}
-		return t.Add(label, counts)
+		b.Add(label, counts)
 	}
 }
 
@@ -97,7 +98,7 @@ func AggMean(cols ...string) Aggregator {
 		ocols[i] = "mean " + col
 	}
 
-	return func(input table.Grouping, t *table.Table) *table.Table {
+	return func(input table.Grouping, b *table.Builder) {
 		for coli, col := range cols {
 			means := make([]float64, 0, len(input.Tables()))
 
@@ -107,9 +108,8 @@ func AggMean(cols ...string) Aggregator {
 				means = append(means, stats.Mean(xs))
 			}
 
-			t = t.Add(ocols[coli], means)
+			b.Add(ocols[coli], means)
 		}
-		return t
 	}
 }
 
@@ -117,9 +117,9 @@ func AggMean(cols ...string) Aggregator {
 // value of each of cols. If a given group contains more than one
 // value, it panics.
 func AggUnique(cols ...string) Aggregator {
-	return func(input table.Grouping, t *table.Table) *table.Table {
+	return func(input table.Grouping, b *table.Builder) {
 		if len(cols) == 0 {
-			return t
+			return
 		}
 		if len(input.Tables()) == 0 {
 			panic(fmt.Sprintf("unknown column: %q", cols[0]))
@@ -152,9 +152,7 @@ func AggUnique(cols ...string) Aggregator {
 			}
 
 			// Add unique values slice to output table.
-			t = t.Add(col, vs.Interface())
+			b.Add(col, vs.Interface())
 		}
-
-		return t
 	}
 }

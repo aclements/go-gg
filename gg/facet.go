@@ -150,7 +150,7 @@ func (f *FacetCommon) apply(p *Plot, dir string) {
 	subplots := make(map[*subplot][]*subplot)
 	bands := make(map[*subplotBand][]*subplotBand)
 	scales := make(map[bandScale]Scaler)
-	ndata := table.Grouping(new(table.Table))
+	var ndata table.GroupingBuilder
 	for _, gid := range grouped.Tables() {
 		// Find subplot by walking up group hierarchy.
 		sub := subplotOf(gid)
@@ -195,7 +195,7 @@ func (f *FacetCommon) apply(p *Plot, dir string) {
 		// Map this group to its new subplot.
 		nsubplot := nsubplots[vals[gid.Label()].index]
 		ngid := gid.Parent().Extend(nsubplot)
-		ndata = ndata.AddTable(ngid, grouped.Table(gid))
+		ndata.Add(ngid, grouped.Table(gid))
 
 		// Split scales if requested. At a high level, we want
 		// to give each band a new scale, but there may
@@ -228,7 +228,7 @@ func (f *FacetCommon) apply(p *Plot, dir string) {
 		}
 	}
 
-	p.SetData(ndata)
+	p.SetData(ndata.Done())
 }
 
 // subplotBand represents a rectangular group of subplots in either a

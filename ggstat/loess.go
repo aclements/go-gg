@@ -82,8 +82,9 @@ func (s LOESS) F(g table.Grouping) table.Grouping {
 		eval := evals[gid]
 
 		loess := fit.LOESS(xs, ys, s.Degree, s.Span)
-		nt := new(table.Table).Add(s.X, eval).Add(s.Y, vec.Map(loess, eval))
-		return preserveConsts(nt, t)
+		nt := new(table.Builder).Add(s.X, eval).Add(s.Y, vec.Map(loess, eval))
+		preserveConsts(nt, t)
+		return nt.Done()
 	}, g)
 }
 
@@ -156,16 +157,14 @@ func evalPoints(g table.Grouping, x string, n int, widen float64, splitGroups bo
 }
 
 // preserveConsts copies the constant columns from t into nt.
-func preserveConsts(nt, t *table.Table) *table.Table {
-	nnt := nt
+func preserveConsts(nt *table.Builder, t *table.Table) {
 	for _, col := range t.Columns() {
-		if _, ok := nt.Const(col); ok || nt.Column(col) != nil {
+		if nt.Has(col) {
 			// Don't overwrite existing columns in nt.
 			continue
 		}
 		if cv, ok := t.Const(col); ok {
-			nnt = nnt.AddConst(col, cv)
+			nt.AddConst(col, cv)
 		}
 	}
-	return nnt
 }

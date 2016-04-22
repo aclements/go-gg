@@ -91,7 +91,7 @@ retry:
 	}
 
 	p.SetData(table.MapTables(func(_ table.GroupID, t *table.Table) *table.Table {
-		return t.AddConst(col, val)
+		return table.NewBuilder(t).AddConst(col, val).Done()
 	}, tab))
 
 	return col

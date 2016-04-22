@@ -63,11 +63,11 @@ func Filter(g Grouping, pred interface{}, cols ...string) Grouping {
 		if len(match) == t.Len() {
 			return t
 		}
-		nt := new(Table)
+		var nt Builder
 		for _, col := range t.Columns() {
-			nt = nt.Add(col, generic.MultiIndex(t.Column(col), match))
+			nt.Add(col, generic.MultiIndex(t.Column(col), match))
 		}
-		return nt
+		return nt.Done()
 	}, g)
 }
 
@@ -85,10 +85,10 @@ func FilterEq(g Grouping, col string, val interface{}) Grouping {
 			}
 		}
 
-		nt := new(Table)
+		var nt Builder
 		for _, col := range t.Columns() {
-			nt = nt.Add(col, generic.MultiIndex(t.Column(col), match))
+			nt.Add(col, generic.MultiIndex(t.Column(col), match))
 		}
-		return nt
+		return nt.Done()
 	}, g)
 }

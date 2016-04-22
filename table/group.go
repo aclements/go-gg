@@ -81,22 +81,19 @@ func GroupBy(g Grouping, cols ...string) Grouping {
 	// and then cut that up into the groups so that it's one
 	// allocation per column regardless of how many groups there
 	// are.
-	//
-	// TODO: This spends a lot of time and garbage in table.Add
-	// (mostly table.cloneSans).
 
 	if len(cols) == 0 {
 		return g
 	}
 
-	out := new(groupedTable)
+	var out GroupingBuilder
 	for _, gid := range g.Tables() {
 		t := g.Table(gid)
 
 		if cv, ok := t.Const(cols[0]); ok {
 			// Grouping by a constant is trivial.
 			subgid := gid.Extend(cv)
-			out.addTableUpdate(subgid, t)
+			out.Add(subgid, t)
 			continue
 		}
 
@@ -127,28 +124,28 @@ func GroupBy(g Grouping, cols ...string) Grouping {
 		for _, subgroup := range subgroups {
 			// Construct this new group.
 			rows := rowsMap[subgroup.gid]
-			subtable := new(Table)
+			var subtable Builder
 			for _, name := range t.Columns() {
 				if name == cols[0] {
 					// Promote the group-by column
 					// to a constant.
-					subtable = subtable.AddConst(name, subgroup.val)
+					subtable.AddConst(name, subgroup.val)
 					continue
 				}
 				if cv, ok := t.Const(name); ok {
 					// Keep constants constant.
-					subtable = subtable.AddConst(name, cv)
+					subtable.AddConst(name, cv)
 					continue
 				}
 				seq := t.Column(name)
 				seq = generic.MultiIndex(seq, rows)
-				subtable = subtable.Add(name, seq)
+				subtable.Add(name, seq)
 			}
-			out.addTableUpdate(subgroup.gid, subtable)
+			out.Add(subgroup.gid, subtable.Done())
 		}
 	}
 
-	return GroupBy(out, cols[1:]...)
+	return GroupBy(out.Done(), cols[1:]...)
 }
 
 // Ungroup concatenates adjacent Tables in g that share a group parent
@@ -160,13 +157,13 @@ func Ungroup(g Grouping) Grouping {
 		return g
 	}
 
-	out := Grouping(new(Table))
+	var out GroupingBuilder
 	runGid := groups[0].Parent()
 	runTabs := []*Table{}
 	for _, gid := range groups {
 		if gid.Parent() != runGid {
 			// Flush the run.
-			out = out.AddTable(runGid, concatRows(runTabs...))
+			out.Add(runGid, concatRows(runTabs...))
 
 			runGid = gid.Parent()
 			runTabs = runTabs[:0]
@@ -174,9 +171,9 @@ func Ungroup(g Grouping) Grouping {
 		runTabs = append(runTabs, g.Table(gid))
 	}
 	// Flush the last run.
-	out = out.AddTable(runGid, concatRows(runTabs...))
+	out.Add(runGid, concatRows(runTabs...))
 
-	return out
+	return out.Done()
 }
 
 // Flatten concatenates all of the groups in g into a single Table.
@@ -214,15 +211,15 @@ func concatRows(tabs ...*Table) *Table {
 	}
 
 	// Construct each column.
-	out := new(Table)
+	var out Builder
 	seqs := make([]generic.Slice, len(tabs))
 	for _, col := range tabs[0].Columns() {
 		seqs = seqs[:0]
 		for _, tab := range tabs {
 			seqs = append(seqs, tab.Column(col))
 		}
-		out = out.Add(col, generic.Concat(seqs...))
+		out.Add(col, generic.Concat(seqs...))
 	}
 
-	return out
+	return out.Done()
 }

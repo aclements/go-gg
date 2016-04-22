@@ -20,7 +20,7 @@ func TableFromStructs(structs Slice) *Table {
 		panic(&generic.TypeError{st, nil, "is not a slice of struct"})
 	}
 
-	t := new(Table)
+	var t Builder
 	rows := s.Len()
 	var rec func(reflect.Type, []int)
 	rec = func(typ reflect.Type, index []int) {
@@ -38,13 +38,13 @@ func TableFromStructs(structs Slice) *Table {
 				for i := 0; i < rows; i++ {
 					col.Index(i).Set(s.Index(i).FieldByIndex(index))
 				}
-				t = t.Add(field.Name, col.Interface())
+				t.Add(field.Name, col.Interface())
 			}
 			index = index[:oldIndexLen]
 		}
 	}
 	rec(st.Elem(), []int{})
-	return t
+	return t.Done()
 }
 
 // TableFromStrings converts a [][]string to a Table. This is intended
@@ -53,7 +53,7 @@ func TableFromStructs(structs Slice) *Table {
 // when every string in that column is accepted by strconv.ParseInt or
 // strconv.ParseFloat, respectively.
 func TableFromStrings(cols []string, rows [][]string, coerce bool) *Table {
-	t := new(Table)
+	var t Builder
 	for i, col := range cols {
 		slice := make([]string, len(rows))
 		for j, row := range rows {
@@ -99,7 +99,7 @@ func TableFromStrings(cols []string, rows [][]string, coerce bool) *Table {
 			}
 		}
 
-		t = t.Add(col, colData)
+		t.Add(col, colData)
 	}
-	return t
+	return t.Done()
 }

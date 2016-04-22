@@ -144,7 +144,7 @@ func (d Density) F(g table.Grouping) table.Grouping {
 		kde.Sample = samples[gid]
 
 		if kde.Sample.Weight() == 0 {
-			return new(table.Table).Add(d.X, []float64{}).Add(dname, []float64{}).Add(cname, []float64{})
+			return new(table.Builder).Add(d.X, []float64{}).Add(dname, []float64{}).Add(cname, []float64{}).Done()
 		}
 
 		if d.Bandwidth == 0 {
@@ -158,9 +158,10 @@ func (d Density) F(g table.Grouping) table.Grouping {
 		}
 
 		ss := vec.Linspace(min, max, d.N)
-		nt := new(table.Table).Add(d.X, ss)
-		nt = nt.Add(dname, vec.Map(kde.PDF, ss))
-		nt = nt.Add(cname, vec.Map(kde.CDF, ss))
-		return preserveConsts(nt, t)
+		nt := new(table.Builder).Add(d.X, ss)
+		nt.Add(dname, vec.Map(kde.PDF, ss))
+		nt.Add(cname, vec.Map(kde.CDF, ss))
+		preserveConsts(nt, t)
+		return nt.Done()
 	}, g)
 }

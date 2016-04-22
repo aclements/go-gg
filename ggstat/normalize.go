@@ -92,13 +92,13 @@ func (s Normalize) F(g table.Grouping) table.Grouping {
 		}
 
 		// Normalize columns.
-		newt := t
+		newt := table.NewBuilder(t)
 		for coli, col := range s.Cols {
 			out := normalizeTo(t.MustColumn(col), drow)
-			newt = newt.Add(newcols[coli], out)
+			newt.Add(newcols[coli], out)
 		}
 
-		return newt
+		return newt.Done()
 	}, g)
 }
 

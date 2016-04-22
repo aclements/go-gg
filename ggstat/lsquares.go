@@ -71,7 +71,8 @@ func (s LeastSquares) F(g table.Grouping) table.Grouping {
 		eval := evals[gid]
 
 		r := fit.PolynomialRegression(xs, ys, nil, s.Degree)
-		nt := new(table.Table).Add(s.X, eval).Add(s.Y, vec.Map(r.F, eval))
-		return preserveConsts(nt, t)
+		nt := new(table.Builder).Add(s.X, eval).Add(s.Y, vec.Map(r.F, eval))
+		preserveConsts(nt, t)
+		return nt.Done()
 	}, g)
 }

@@ -8,9 +8,9 @@ package table
 // with the same group structure as g, but with the Tables returned by
 // f.
 func MapTables(f func(gid GroupID, table *Table) *Table, g Grouping) Grouping {
-	out := new(groupedTable)
+	var out GroupingBuilder
 	for _, gid := range g.Tables() {
-		out.addTableUpdate(gid, f(gid, g.Table(gid)))
+		out.Add(gid, f(gid, g.Table(gid)))
 	}
-	return out
+	return out.Done()
 }

@@ -99,20 +99,22 @@ B,2,2.0
 
 	// No coercion.
 	tab := TableFromStrings(rows[0], rows[1:], false)
-	want := new(Table).
+	want := new(Builder).
 		Add("a", []string{"A", "B"}).
 		Add("b", []string{"1", "2"}).
-		Add("c", []string{"1.0", "2.0"})
+		Add("c", []string{"1.0", "2.0"}).
+		Done()
 	if !equal(want, tab) {
 		t.Errorf("want:\n%sgot:\n%s", groupString(want), groupString(tab))
 	}
 
 	// Coercion.
 	tab = TableFromStrings(rows[0], rows[1:], true)
-	want = new(Table).
+	want = new(Builder).
 		Add("a", []string{"A", "B"}).
 		Add("b", []int{1, 2}).
-		Add("c", []float64{1, 2})
+		Add("c", []float64{1, 2}).
+		Done()
 	if !equal(want, tab) {
 		t.Errorf("want:\n%sgot:\n%s", groupString(want), groupString(tab))
 	}
@@ -122,10 +124,11 @@ B,2,2.0
 	rows, _ = csv.NewReader(bytes.NewBufferString(csvData)).ReadAll()
 
 	tab = TableFromStrings(rows[0], rows[1:], true)
-	want = new(Table).
+	want = new(Builder).
 		Add("a", []string{"A", "B", "C"}).
 		Add("b", []string{"1", "2", "x"}).
-		Add("c", []string{"1.0", "2.0", "x"})
+		Add("c", []string{"1.0", "2.0", "x"}).
+		Done()
 	if !equal(want, tab) {
 		t.Errorf("want:\n%sgot:\n%s", groupString(want), groupString(tab))
 	}

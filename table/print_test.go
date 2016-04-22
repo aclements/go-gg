@@ -17,9 +17,10 @@ func groupString(g Grouping) string {
 }
 
 func ExampleFprint() {
-	tab := new(Table).
+	tab := new(Builder).
 		Add("name", []string{"Washington", "Adams", "Jefferson"}).
-		Add("terms", []int{2, 1, 2})
+		Add("terms", []int{2, 1, 2}).
+		Done()
 	Fprint(os.Stdout, tab)
 	// Output:
 	// name       terms
@@ -29,9 +30,10 @@ func ExampleFprint() {
 }
 
 func ExampleFprint_Formats() {
-	tab := new(Table).
+	tab := new(Builder).
 		Add("name", []string{"Washington", "Adams", "Jefferson"}).
-		Add("terms", []int{2, 1, 2})
+		Add("terms", []int{2, 1, 2}).
+		Done()
 	Fprint(os.Stdout, tab, "President %s", "%#x")
 	// Output:
 	// name                 terms
@@ -41,10 +43,11 @@ func ExampleFprint_Formats() {
 }
 
 func ExampleFprint_Groups() {
-	tab := new(Table).
+	tab := new(Builder).
 		Add("name", []string{"Washington", "Adams", "Jefferson"}).
 		Add("terms", []int{2, 1, 2}).
-		Add("state", []string{"Virginia", "Massachusetts", "Virginia"})
+		Add("state", []string{"Virginia", "Massachusetts", "Virginia"}).
+		Done()
 	g := GroupBy(tab, "state")
 	Fprint(os.Stdout, g)
 	// Output:
