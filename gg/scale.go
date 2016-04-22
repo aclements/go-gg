@@ -250,7 +250,7 @@ func DefaultScale(seq table.Slice) (Scaler, error) {
 	case isCardinal(rtk):
 		return NewLinearScaler(), nil
 
-	case generic.CanOrderR(rtk):
+	case generic.CanSort(seq):
 		return NewOrdinalScale(), nil
 
 	case rt.Comparable():
