@@ -17,19 +17,19 @@ func ConvertSlice(to interface{}, from Slice) {
 	if tv.Kind() != reflect.Ptr {
 		panic(&TypeError{tv.Type(), nil, "is not a *[]T"})
 	}
-	tsv := tv.Elem()
-	if tsv.Kind() != reflect.Slice {
+	tst := tv.Type().Elem()
+	if tst.Kind() != reflect.Slice {
 		panic(&TypeError{tv.Type(), nil, "is not a *[]T"})
 	}
 
-	if fv.Type().AssignableTo(tsv.Type()) {
+	if fv.Type().AssignableTo(tst) {
 		tv.Elem().Set(fv)
 		return
 	}
 
-	eltt := tsv.Type().Elem()
+	eltt := tst.Elem()
 	if !fv.Type().Elem().ConvertibleTo(eltt) {
-		panic(&TypeError{fv.Type(), tsv.Type(), "cannot be converted"})
+		panic(&TypeError{fv.Type(), tst, "cannot be converted"})
 	}
 
 	switch to := to.(type) {
@@ -41,6 +41,7 @@ func ConvertSlice(to interface{}, from Slice) {
 		}
 
 	default:
+		tsv := tv.Elem()
 		tsv.SetLen(0)
 		for i, len := 0, fv.Len(); i < len; i++ {
 			tsv = reflect.Append(tsv, fv.Index(i).Convert(eltt))
