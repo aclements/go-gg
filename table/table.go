@@ -97,12 +97,11 @@ type Grouping interface {
 	// AddTable returns a new Grouping with the addition of Table
 	// t bound to group gid. If t is nil, it returns a Grouping
 	// with group gid removed. If t is the empty Table, this is a
-	// no-op because the empty Table contains no groups.
-	// Otherwise, AddTable first removes group gid if it already
-	// exists, and then adds t as a new group. Table t must have
-	// the same set of columns as any existing Tables in this
-	// group and they must have identical types; otherwise,
-	// AddTable will panic.
+	// no-op because the empty Table contains no groups. If gid
+	// already exists, AddTable replaces it. Table t must have the
+	// same set of columns as any existing Tables in this group
+	// and they must have identical types; otherwise, AddTable
+	// will panic.
 	//
 	// TODO The same set or the same sequence of columns? Given
 	// that I never use the sequence (except maybe for printing),
@@ -346,7 +345,10 @@ func (g *groupedTable) AddTable(gid GroupID, t *Table) Grouping {
 	// with the same GID.
 	ng := &groupedTable{map[GroupID]*Table{}, []GroupID{}, g.colNames}
 	for _, gid2 := range g.groups {
-		if gid != gid2 {
+		if gid == gid2 && t == nil {
+			// Omit this Table.
+			continue
+		} else {
 			ng.tables[gid2] = g.tables[gid2]
 			ng.groups = append(ng.groups, gid2)
 		}
@@ -398,8 +400,11 @@ func (g *groupedTable) AddTable(gid GroupID, t *Table) Grouping {
 		}
 	}
 
+	_, have := ng.tables[gid]
 	ng.tables[gid] = t
-	ng.groups = append(ng.groups, gid)
+	if !have {
+		ng.groups = append(ng.groups, gid)
+	}
 	return ng
 }
 
