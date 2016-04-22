@@ -18,15 +18,13 @@ func CanSort(v interface{}) bool {
 }
 
 // Sort sorts v in increasing order. v must implement sort.Interface
-// or must be a slice, array, or pointer to array whose element type
-// is orderable.
+// or must be a slice whose elements are orderable.
 func Sort(v interface{}) {
 	sort.Sort(Sorter(v))
 }
 
 // Sorter returns a sort.Interface for sorting v. v must implement
-// sort.Interface or must be a slice, array, or pointer to array whose
-// element type is orderable.
+// sort.Interface or must be a slice whose elements are orderable.
 func Sorter(v interface{}) sort.Interface {
 	switch v := v.(type) {
 	case []int:
@@ -39,7 +37,7 @@ func Sorter(v interface{}) sort.Interface {
 		return v
 	}
 
-	rv := sequence(v)
+	rv := reflectSlice(v)
 	switch rv.Type().Elem().Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		return sortIntSlice{rv}
