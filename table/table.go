@@ -28,6 +28,18 @@ import (
 	"github.com/aclements/go-gg/generic"
 )
 
+// TODO
+//
+// Rename Table to T?
+//
+// Make Add replace column in place?
+//
+// Require same columns sequence for adding a table?
+//
+// Make Table an interface? Then columns could be constructed lazily.
+//
+// Have separate builder/viewer APIs?
+
 // A Table is an ordered two dimensional relation. It consists of a
 // set of named columns. Each column is a sequence of values of a
 // consistent type or a constant value. All (non-constant) columns
