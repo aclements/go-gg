@@ -77,10 +77,9 @@ func GroupBy(g Grouping, cols ...string) Grouping {
 	// TODO: This would generate much less garbage if we grouped
 	// all of cols in one pass.
 	//
-	// TODO: Construct each result column as a contiguous slice
-	// and then cut that up into the groups so that it's one
-	// allocation per column regardless of how many groups there
-	// are.
+	// TODO: This constructs one slice per column per input group,
+	// but it would be even better if it constructed just one
+	// slice per column.
 
 	if len(cols) == 0 {
 		return g
@@ -119,28 +118,48 @@ func GroupBy(g Grouping, cols ...string) Grouping {
 			subgroup.rows = append(subgroup.rows, i)
 		}
 
-		// Split this group in all columns.
-		for _, subgroup := range subgroups {
-			// Construct this new group.
-			var subtable Builder
-			for _, name := range t.Columns() {
-				if name == cols[0] {
-					// Promote the group-by column
-					// to a constant.
-					subtable.AddConst(name, subgroup.key)
-					continue
+		// Count rows in each subgroup.
+		offsets := make([]int, 1+len(subgroups))
+		for i := range subgroups {
+			offsets[i+1] = offsets[i] + len(subgroups[i].rows)
+		}
+
+		// Split each column.
+		builders := make([]Builder, len(subgroups))
+		for _, name := range t.Columns() {
+			if name == cols[0] {
+				// Promote the group-by column to a
+				// constant.
+				for i := range subgroups {
+					builders[i].AddConst(name, subgroups[i].key)
 				}
-				if cv, ok := t.Const(name); ok {
-					// Keep constants constant.
-					subtable.AddConst(name, cv)
-					continue
-				}
-				seq := t.Column(name)
-				seq = generic.MultiIndex(seq, subgroup.rows)
-				subtable.Add(name, seq)
+				continue
 			}
-			subgid := gid.Extend(subgroup.key)
-			out.Add(subgid, subtable.Done())
+
+			if cv, ok := t.Const(name); ok {
+				// Keep constants constant.
+				for i := range builders {
+					builders[i].AddConst(name, cv)
+				}
+				continue
+			}
+
+			// Create a slice for all of the values.
+			col := t.Column(name)
+			ncol := reflect.MakeSlice(reflect.TypeOf(col), t.Len(), t.Len())
+
+			// Shuffle each subgroup into ncol.
+			for i := range subgroups {
+				subcol := ncol.Slice(offsets[i], offsets[i+1]).Interface()
+				generic.CopyIndex(subcol, col, subgroups[i].rows)
+				builders[i].Add(name, subcol)
+			}
+		}
+
+		// Add tables to output Grouping.
+		for i := range builders {
+			subgid := gid.Extend(subgroups[i].key)
+			out.Add(subgid, builders[i].Done())
 		}
 	}
 
