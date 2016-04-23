@@ -101,35 +101,33 @@ func GroupBy(g Grouping, cols ...string) Grouping {
 
 		// Create an index on c.
 		type subgroupInfo struct {
-			gid GroupID
-			val interface{}
+			key  interface{}
+			rows []int
 		}
 		subgroups := []subgroupInfo{}
-		gidkey := make(map[interface{}]GroupID)
-		rowsMap := make(map[GroupID][]int)
+		keys := make(map[interface{}]int)
 		seq := reflect.ValueOf(c)
 		for i := 0; i < seq.Len(); i++ {
 			x := seq.Index(i).Interface()
-			subgid, ok := gidkey[x]
+			sg, ok := keys[x]
 			if !ok {
-				subgid = gid.Extend(x)
-				subgroups = append(subgroups, subgroupInfo{subgid, x})
-				gidkey[x] = subgid
-				rowsMap[subgid] = []int{}
+				sg = len(subgroups)
+				subgroups = append(subgroups, subgroupInfo{x, []int{}})
+				keys[x] = sg
 			}
-			rowsMap[subgid] = append(rowsMap[subgid], i)
+			subgroup := &subgroups[sg]
+			subgroup.rows = append(subgroup.rows, i)
 		}
 
 		// Split this group in all columns.
 		for _, subgroup := range subgroups {
 			// Construct this new group.
-			rows := rowsMap[subgroup.gid]
 			var subtable Builder
 			for _, name := range t.Columns() {
 				if name == cols[0] {
 					// Promote the group-by column
 					// to a constant.
-					subtable.AddConst(name, subgroup.val)
+					subtable.AddConst(name, subgroup.key)
 					continue
 				}
 				if cv, ok := t.Const(name); ok {
@@ -138,10 +136,11 @@ func GroupBy(g Grouping, cols ...string) Grouping {
 					continue
 				}
 				seq := t.Column(name)
-				seq = generic.MultiIndex(seq, rows)
+				seq = generic.MultiIndex(seq, subgroup.rows)
 				subtable.Add(name, seq)
 			}
-			out.Add(subgroup.gid, subtable.Done())
+			subgid := gid.Extend(subgroup.key)
+			out.Add(subgid, subtable.Done())
 		}
 	}
 
