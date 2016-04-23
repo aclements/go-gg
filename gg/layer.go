@@ -4,7 +4,23 @@
 
 package gg
 
-import "github.com/aclements/go-gg/table"
+import (
+	"fmt"
+
+	"github.com/aclements/go-gg/table"
+)
+
+func defaultCols(p *Plot, cols ...*string) {
+	dcols := p.Data().Columns()
+	for i, colp := range cols {
+		if *colp == "" {
+			if i >= len(dcols) {
+				panic(fmt.Sprintf("cannot get default column %d; table has only %d columns", i, len(dcols)))
+			}
+			*colp = dcols[i]
+		}
+	}
+}
 
 // LayerLines is like LayerPaths, but connects data points in order by
 // the "x" property.
@@ -57,7 +73,7 @@ func (l LayerSteps) Apply(p *Plot) {
 	// Then it could be used in conjunction with, for example,
 	// ribbons.
 
-	l.resolveDefaults()
+	defaultCols(p, &l.X, &l.Y)
 	p.marks = append(p.marks, plotMark{&markSteps{
 		l.Step,
 		p.use("x", l.X),
@@ -104,21 +120,12 @@ type LayerPaths struct {
 	// does not change) and hand that to the renderer later.
 }
 
-func (l *LayerPaths) resolveDefaults() {
-	if l.X == "" {
-		l.X = "@0"
-	}
-	if l.Y == "" {
-		l.Y = "@1"
-	}
-}
-
 func (l LayerPaths) Apply(p *Plot) {
 	l.apply(p, false)
 }
 
 func (l LayerPaths) apply(p *Plot, sort bool) {
-	l.resolveDefaults()
+	defaultCols(p, &l.X, &l.Y)
 	if l.Color != "" {
 		p.GroupBy(l.Color)
 	}
@@ -127,8 +134,6 @@ func (l LayerPaths) apply(p *Plot, sort bool) {
 	}
 	if sort {
 		defer p.Save().Restore()
-		// TODO: This doesn't understand @0, so this fails if
-		// X is defaulted.
 		p = p.SortBy(l.X)
 	}
 
@@ -159,17 +164,8 @@ type LayerPoints struct {
 	// XXX fill vs stroke, size, shape
 }
 
-func (l *LayerPoints) resolveDefaults() {
-	if l.X == "" {
-		l.X = "@0"
-	}
-	if l.Y == "" {
-		l.Y = "@1"
-	}
-}
-
 func (l LayerPoints) Apply(p *Plot) {
-	l.resolveDefaults()
+	defaultCols(p, &l.X, &l.Y)
 	p.marks = append(p.marks, plotMark{&markPoint{
 		p.use("x", l.X),
 		p.use("y", l.Y),
@@ -206,17 +202,8 @@ type LayerTiles struct {
 	// XXX Stroke color/width, opacity, center adjustment.
 }
 
-func (l *LayerTiles) resolveDefaults() {
-	if l.X == "" {
-		l.X = "@0"
-	}
-	if l.Y == "" {
-		l.Y = "@1"
-	}
-}
-
 func (l LayerTiles) Apply(p *Plot) {
-	l.resolveDefaults()
+	defaultCols(p, &l.X, &l.Y)
 	if l.Width != "" || l.Height != "" {
 		// TODO: What scale are these in? (x+width) is in the
 		// X scale, but width itself is not. It doesn't make
@@ -251,20 +238,11 @@ type LayerTags struct {
 	Label string
 }
 
-func (l *LayerTags) resolveDefaults() {
-	if l.X == "" {
-		l.X = "@0"
-	}
-	if l.Y == "" {
-		l.Y = "@1"
-	}
-}
-
 func (l LayerTags) Apply(p *Plot) {
 	// TODO: Should there be special "annotation marks" that are
 	// always on top and can perhaps extend outside the plot area?
 
-	l.resolveDefaults()
+	defaultCols(p, &l.X, &l.Y)
 	// TODO: I keep wanting an abstraction for a column across
 	// groups like this.
 	labels := make(map[table.GroupID]table.Slice)

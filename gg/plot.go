@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"strconv"
 
 	"github.com/aclements/go-gg/table"
 )
@@ -190,18 +189,6 @@ type scaledDataKey struct {
 func (p *Plot) use(aes string, col string) *scaledData {
 	if col == "" {
 		return nil
-	}
-
-	if col[0] == '@' {
-		// TODO: Document this.
-		n, err := strconv.Atoi(col[1:])
-		if err == nil {
-			cols := p.Data().Columns()
-			if n >= len(cols) {
-				panic(fmt.Sprintf("column index %d out of range; table has %d columns", n, len(cols)))
-			}
-			col = cols[n]
-		}
 	}
 
 	// TODO: This is wrong. If the scale tree for aes changes,
