@@ -38,3 +38,41 @@ func MultiIndex(v Slice, indexes []int) Slice {
 	}
 	return res.Interface()
 }
+
+// CopyIndex assigns out[i] = in[indexes[i]]. in and out must have the
+// same types and len(out) must be >= len(indexes). If in and out
+// overlap, the results are undefined.
+func CopyIndex(out, in Slice, indexes []int) {
+	// TODO: Maybe they should only have to be assignable?
+	if it, ot := reflect.TypeOf(in), reflect.TypeOf(out); it != ot {
+		panic(&TypeError{it, ot, "must be the same type"})
+	}
+
+	switch in := in.(type) {
+	case []int:
+		out := out.([]int)
+		for i, x := range indexes {
+			out[i] = in[x]
+		}
+		return
+
+	case []float64:
+		out := out.([]float64)
+		for i, x := range indexes {
+			out[i] = in[x]
+		}
+		return
+
+	case []string:
+		out := out.([]string)
+		for i, x := range indexes {
+			out[i] = in[x]
+		}
+		return
+	}
+
+	inv, outv := reflectSlice(in), reflectSlice(out)
+	for i, x := range indexes {
+		outv.Index(i).Set(inv.Index(x))
+	}
+}
