@@ -13,8 +13,8 @@ var trueVal = reflect.ValueOf(true)
 func Nub(v Slice) Slice {
 	rv := reflectSlice(v)
 	indexes := make([]int, 0)
-	set := reflect.MakeMap(reflect.MapOf(rv.Type().Elem(), reflect.TypeOf(false)))
-	for i := 0; i < rv.Len(); i++ {
+	set := reflect.MakeMap(reflect.MapOf(rv.Type().Elem(), trueVal.Type()))
+	for i, l := 0, rv.Len(); i < l; i++ {
 		x := rv.Index(i)
 		if set.MapIndex(x).IsValid() {
 			continue
@@ -33,12 +33,12 @@ func NubAppend(vs ...Slice) Slice {
 	}
 
 	rv := reflectSlice(vs[0])
-	set := reflect.MakeMap(reflect.MapOf(rv.Type().Elem(), reflect.TypeOf(false)))
+	set := reflect.MakeMap(reflect.MapOf(rv.Type().Elem(), trueVal.Type()))
 	out := reflect.MakeSlice(rv.Type(), 0, 0)
 
 	for _, v := range vs {
 		rv := reflectSlice(v)
-		for i := 0; i < rv.Len(); i++ {
+		for i, l := 0, rv.Len(); i < l; i++ {
 			x := rv.Index(i)
 			if set.MapIndex(x).IsValid() {
 				continue
