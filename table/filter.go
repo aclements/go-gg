@@ -19,6 +19,7 @@ var boolType = reflect.TypeOf(false)
 //
 // TODO: Create a faster batch variant where pred takes slices.
 func Filter(g Grouping, pred interface{}, cols ...string) Grouping {
+	// TODO: Use generic.TypeError.
 	predv := reflect.ValueOf(pred)
 	predt := predv.Type()
 	if predt.Kind() != reflect.Func || predt.NumIn() != len(cols) || predt.NumOut() != 1 || predt.Out(0) != boolType {
