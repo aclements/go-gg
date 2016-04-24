@@ -74,7 +74,7 @@ func (s LOESS) F(g table.Grouping) table.Grouping {
 	evals := evalPoints(g, s.X, s.N, s.Widen, s.SplitGroups)
 
 	var xs, ys []float64
-	return table.MapTables(func(gid table.GroupID, t *table.Table) *table.Table {
+	return table.MapTables(g, func(gid table.GroupID, t *table.Table) *table.Table {
 		// TODO: We potentially convert each X column twice,
 		// since evalPoints also has to convert them.
 		generic.ConvertSlice(&xs, t.MustColumn(s.X))
@@ -85,7 +85,7 @@ func (s LOESS) F(g table.Grouping) table.Grouping {
 		nt := new(table.Builder).Add(s.X, eval).Add(s.Y, vec.Map(loess, eval))
 		preserveConsts(nt, t)
 		return nt.Done()
-	}, g)
+	})
 }
 
 // TODO: Rethink evalPoints/preserveConsts. We probably want an

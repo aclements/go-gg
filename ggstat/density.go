@@ -140,7 +140,7 @@ func (d Density) F(g table.Grouping) table.Grouping {
 		}
 	}
 
-	return table.MapTables(func(gid table.GroupID, t *table.Table) *table.Table {
+	return table.MapTables(g, func(gid table.GroupID, t *table.Table) *table.Table {
 		kde.Sample = samples[gid]
 
 		if kde.Sample.Weight() == 0 {
@@ -163,5 +163,5 @@ func (d Density) F(g table.Grouping) table.Grouping {
 		nt.Add(cname, vec.Map(kde.CDF, ss))
 		preserveConsts(nt, t)
 		return nt.Done()
-	}, g)
+	})
 }

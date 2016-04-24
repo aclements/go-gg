@@ -90,9 +90,9 @@ retry:
 		}
 	}
 
-	p.SetData(table.MapTables(func(_ table.GroupID, t *table.Table) *table.Table {
+	p.SetData(table.MapTables(tab, func(_ table.GroupID, t *table.Table) *table.Table {
 		return table.NewBuilder(t).AddConst(col, val).Done()
-	}, tab))
+	}))
 
 	return col
 }

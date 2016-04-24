@@ -72,7 +72,7 @@ func (s Normalize) F(g table.Grouping) table.Grouping {
 		// TODO: Type check byv better.
 	}
 
-	return table.MapTables(func(_ table.GroupID, t *table.Table) *table.Table {
+	return table.MapTables(g, func(_ table.GroupID, t *table.Table) *table.Table {
 		// Find the denominator row.
 		var drow int
 		if s.X == "" {
@@ -99,7 +99,7 @@ func (s Normalize) F(g table.Grouping) table.Grouping {
 		}
 
 		return newt.Done()
-	}, g)
+	})
 }
 
 func colTypes(g table.Grouping) []reflect.Type {

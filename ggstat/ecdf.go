@@ -77,7 +77,7 @@ func (s ECDF) F(g table.Grouping) table.Grouping {
 		s.Widen = 1.0
 	}
 	col := getCol(g, s.X, s.Widen, s.SplitGroups)
-	return table.MapTables(func(gid table.GroupID, t *table.Table) *table.Table {
+	return table.MapTables(g, func(gid table.GroupID, t *table.Table) *table.Table {
 		// Get input columns.
 		var ws []float64
 		xs := col[gid].data
@@ -138,5 +138,5 @@ func (s ECDF) F(g table.Grouping) table.Grouping {
 		nt := new(table.Builder).Add(s.X, xo).Add(dname, do).Add(cname, co)
 		preserveConsts(nt, t)
 		return nt.Done()
-	}, g)
+	})
 }

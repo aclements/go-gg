@@ -14,7 +14,7 @@ import (
 // MapTables applies f to each Table in g and returns a new Grouping
 // with the same group structure as g, but with the Tables returned by
 // f.
-func MapTables(f func(gid GroupID, table *Table) *Table, g Grouping) Grouping {
+func MapTables(g Grouping, f func(gid GroupID, table *Table) *Table) Grouping {
 	var out GroupingBuilder
 	for _, gid := range g.Tables() {
 		out.Add(gid, f(gid, g.Table(gid)))
@@ -30,7 +30,7 @@ func MapTables(f func(gid GroupID, table *Table) *Table, g Grouping) Grouping {
 // values in the input column slices and fill output columns slices
 // out[j] accordingly. MapCols returns a new Grouping that adds each
 // outcols[j] bound to out[j].
-func MapCols(f interface{}, g Grouping, incols ...string) func(outcols ...string) Grouping {
+func MapCols(g Grouping, f interface{}, incols ...string) func(outcols ...string) Grouping {
 	return func(outcols ...string) Grouping {
 		fv := reflect.ValueOf(f)
 		if fv.Kind() != reflect.Func {

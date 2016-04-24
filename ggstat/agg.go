@@ -49,7 +49,7 @@ type Aggregate struct {
 type Aggregator func(input table.Grouping, output *table.Builder)
 
 func (s Aggregate) F(g table.Grouping) table.Grouping {
-	return table.MapTables(func(_ table.GroupID, t *table.Table) *table.Table {
+	return table.MapTables(g, func(_ table.GroupID, t *table.Table) *table.Table {
 		g := table.GroupBy(t, s.X)
 
 		// Construct X column.
@@ -70,7 +70,7 @@ func (s Aggregate) F(g table.Grouping) table.Grouping {
 		// Keep constant columns.
 		preserveConsts(nt, t)
 		return nt.Done()
-	}, g)
+	})
 }
 
 // AggCount returns an aggregate function that computes the number of

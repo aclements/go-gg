@@ -39,7 +39,7 @@ func Pivot(g Grouping, label, value string) Grouping {
 		}
 	}
 
-	return MapTables(func(_ GroupID, t *Table) *Table {
+	return MapTables(g, func(_ GroupID, t *Table) *Table {
 		var nt Builder
 
 		// Group by all other columns. Each group in gg
@@ -80,7 +80,7 @@ func Pivot(g Grouping, label, value string) Grouping {
 		}
 
 		return nt.Done()
-	}, g)
+	})
 }
 
 // Unpivot converts columns of g into rows. The returned Grouping
@@ -103,7 +103,7 @@ func Unpivot(g Grouping, label, value string, cols ...string) Grouping {
 		colSet[col] = true
 	}
 
-	return MapTables(func(_ GroupID, t *Table) *Table {
+	return MapTables(g, func(_ GroupID, t *Table) *Table {
 		var nt Builder
 
 		// Repeat all other columns len(cols) times.
@@ -149,5 +149,5 @@ func Unpivot(g Grouping, label, value string, cols ...string) Grouping {
 		nt.Add(label, lcol).Add(value, vcol.Interface())
 
 		return nt.Done()
-	}, g)
+	})
 }

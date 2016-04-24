@@ -43,7 +43,7 @@ func Filter(g Grouping, pred interface{}, cols ...string) Grouping {
 	args := make([]reflect.Value, len(cols))
 	colvs := make([]reflect.Value, len(cols))
 	match := make([]int, 0)
-	return MapTables(func(_ GroupID, t *Table) *Table {
+	return MapTables(g, func(_ GroupID, t *Table) *Table {
 		// Get columns.
 		for i, col := range cols {
 			colvs[i] = reflect.ValueOf(t.MustColumn(col))
@@ -69,13 +69,13 @@ func Filter(g Grouping, pred interface{}, cols ...string) Grouping {
 			nt.Add(col, generic.MultiIndex(t.Column(col), match))
 		}
 		return nt.Done()
-	}, g)
+	})
 }
 
 // FilterEq filters g to only rows where the value in col equals val.
 func FilterEq(g Grouping, col string, val interface{}) Grouping {
 	match := make([]int, 0)
-	return MapTables(func(_ GroupID, t *Table) *Table {
+	return MapTables(g, func(_ GroupID, t *Table) *Table {
 		// Find the set of row indexes that match val.
 		seq := t.MustColumn(col)
 		match = match[:0]
@@ -91,5 +91,5 @@ func FilterEq(g Grouping, col string, val interface{}) Grouping {
 			nt.Add(col, generic.MultiIndex(t.Column(col), match))
 		}
 		return nt.Done()
-	}, g)
+	})
 }

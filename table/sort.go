@@ -21,7 +21,7 @@ import (
 func SortBy(g Grouping, cols ...string) Grouping {
 	// Sort each group.
 	sorters := make([]sort.Interface, len(cols))
-	return MapTables(func(_ GroupID, t *Table) *Table {
+	return MapTables(g, func(_ GroupID, t *Table) *Table {
 		// Create sorters for each column.
 		sorters = sorters[:0]
 		for _, col := range cols {
@@ -63,7 +63,7 @@ func SortBy(g Grouping, cols ...string) Grouping {
 			nt.Add(name, seq)
 		}
 		return nt.Done()
-	}, g)
+	})
 }
 
 type permSort struct {
