@@ -23,10 +23,10 @@ func ExampleFprint() {
 		Done()
 	Fprint(os.Stdout, tab)
 	// Output:
-	// name       terms
-	// Washington     2
-	// Adams          1
-	// Jefferson      2
+	// name        terms
+	// Washington      2
+	// Adams           1
+	// Jefferson       2
 }
 
 func ExampleFprint_Formats() {
@@ -36,10 +36,10 @@ func ExampleFprint_Formats() {
 		Done()
 	Fprint(os.Stdout, tab, "President %s", "%#x")
 	// Output:
-	// name                 terms
-	// President Washington   0x2
-	// President Adams        0x1
-	// President Jefferson    0x2
+	// name                  terms
+	// President Washington    0x2
+	// President Adams         0x1
+	// President Jefferson     0x2
 }
 
 func ExampleFprint_Groups() {
@@ -51,12 +51,12 @@ func ExampleFprint_Groups() {
 	g := GroupBy(tab, "state")
 	Fprint(os.Stdout, g)
 	// Output:
-	// name       terms state
+	// name        terms  state
 	// -- /Virginia
-	// Washington     2 Virginia
-	// Jefferson      2 Virginia
+	// Washington      2  Virginia
+	// Jefferson       2  Virginia
 	// -- /Massachusetts
-	// Adams          1 Massachusetts
+	// Adams           1  Massachusetts
 }
 
 func TestFprintEmpty(t *testing.T) {

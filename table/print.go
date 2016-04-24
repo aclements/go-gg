@@ -12,6 +12,11 @@ import (
 	"strings"
 )
 
+// TODO: Have a format struct with options for things like column
+// separator, and header separator. Provide some defaults ones for,
+// e.g., Markdown and such. Make top-level Print and Fprint call
+// methods in some default format.
+
 // Print(...) is shorthand for Fprint(os.Stderr, ...).
 func Print(g Grouping, formats ...string) error {
 	return Fprint(os.Stdout, g, formats...)
@@ -91,7 +96,7 @@ func Fprint(w io.Writer, g Grouping, formats ...string) error {
 	}
 
 	// Print rows.
-	rowFmt := strings.Join(rowFmts, " ") + "\n"
+	rowFmt := strings.Join(rowFmts, "  ") + "\n"
 	rowBuf := make([]interface{}, len(rowFmts))
 	for row := 0; row < len(ss[0]); row++ {
 		if len(groupPos) > 0 && row == groupPos[0] {

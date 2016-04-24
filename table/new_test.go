@@ -18,10 +18,10 @@ func ExampleTableFromStructs() {
 	data := []prez{{"Washington", 2}, {"Adams", 1}, {"Jefferson", 2}}
 	Print(TableFromStructs(data))
 	// Output:
-	// Name       Terms
-	// Washington     2
-	// Adams          1
-	// Jefferson      2
+	// Name        Terms
+	// Washington      2
+	// Adams           1
+	// Jefferson       2
 }
 
 func TestTableFromStructs(t *testing.T) {
@@ -84,10 +84,10 @@ Jefferson,2`
 	rows, _ := csv.NewReader(bytes.NewBufferString(csvData)).ReadAll()
 	Print(TableFromStrings(rows[0], rows[1:], true))
 	// Output:
-	// name       terms
-	// Washington     2
-	// Adams          1
-	// Jefferson      2
+	// name        terms
+	// Washington      2
+	// Adams           1
+	// Jefferson       2
 }
 
 func TestTableFromStrings(t *testing.T) {

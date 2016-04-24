@@ -25,16 +25,16 @@ func ExampleUnpivot() {
 	// Output:
 	//
 	// Original table
-	// state   high low
-	// Alabama  122 -27
-	// Alaska   100 -80
+	// state    high  low
+	// Alabama   122  -27
+	// Alaska    100  -80
 	//
 	// Unpivoted table
-	// state   kind temperature
-	// Alabama high         122
-	// Alabama low          -27
-	// Alaska  high         100
-	// Alaska  low          -80
+	// state    kind  temperature
+	// Alabama  high          122
+	// Alabama  low           -27
+	// Alaska   high          100
+	// Alaska   low           -80
 }
 
 var stateTempByKind = Unpivot(stateTemp, "kind", "temperature", "high", "low")
@@ -48,16 +48,16 @@ func ExamplePivot() {
 	// Output:
 	//
 	// Original table
-	// state   kind temperature
-	// Alabama high         122
-	// Alabama low          -27
-	// Alaska  high         100
-	// Alaska  low          -80
+	// state    kind  temperature
+	// Alabama  high          122
+	// Alabama  low           -27
+	// Alaska   high          100
+	// Alaska   low           -80
 	//
 	// Pivoted table
-	// state   high low
-	// Alabama  122 -27
-	// Alaska   100 -80
+	// state    high  low
+	// Alabama   122  -27
+	// Alaska    100  -80
 }
 
 func TestUnpivot(t *testing.T) {
