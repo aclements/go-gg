@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// Package gg creates plots using the Grammar of Graphics [1].
+// Package gg creates plots using the Grammar of Graphics.
 //
 // WARNING: This API is highly unstable. For now, please vendor this
 // package.
@@ -13,8 +13,8 @@
 // focus on rapid exploration of complex data leads to a very
 // different design than typical plotting packages.
 //
-// gg is heavily inspired by the Grammar of Graphics [1]. A key
-// observation of the Grammar of Graphics is that there are many
+// gg is heavily inspired by Wilkinson's Grammar of Graphics [1]. A
+// key observation of the Grammar of Graphics is that there are many
 // motifs across different types of plots. The Grammar of Graphics
 // separates these motifs into orthogonal concerns that can be
 // manipulated and extended independently, enabling the creation of
