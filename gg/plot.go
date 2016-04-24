@@ -19,9 +19,8 @@ import (
 // production of a plot, but may lead to unexpected results.
 var Warning = log.New(os.Stderr, "[gg] ", log.Lshortfile)
 
+// Plot represents a single (potentially faceted) plot.
 type Plot struct {
-	//facet  facet
-
 	env    *plotEnv
 	scales map[string]scalerTree
 
@@ -35,6 +34,8 @@ type Plot struct {
 	constNonce int
 }
 
+// NewPlot returns a new Plot backed by data. It has no layers, one
+// facet, and all scales are default.
 func NewPlot(data table.Grouping) *Plot {
 	p := &Plot{
 		env: &plotEnv{
@@ -255,10 +256,12 @@ func (p *Plot) Restore() *Plot {
 	return p
 }
 
+// A Plotter is an operation that can modify a Plot.
 type Plotter interface {
 	Apply(*Plot)
 }
 
+// Add applies each of plotters to Plot in order.
 func (p *Plot) Add(plotters ...Plotter) *Plot {
 	for _, plotter := range plotters {
 		plotter.Apply(p)
