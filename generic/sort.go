@@ -64,9 +64,9 @@ func (s sortIntSlice) Less(i, j int) bool {
 }
 
 func (s sortIntSlice) Swap(i, j int) {
-	t := s.Index(j)
-	s.Index(j).Set(s.Index(i))
-	s.Index(i).Set(t)
+	a, b := s.Index(i).Int(), s.Index(j).Int()
+	s.Index(i).SetInt(b)
+	s.Index(j).SetInt(a)
 }
 
 type sortUintSlice struct {
@@ -82,9 +82,9 @@ func (s sortUintSlice) Less(i, j int) bool {
 }
 
 func (s sortUintSlice) Swap(i, j int) {
-	t := s.Index(j)
-	s.Index(j).Set(s.Index(i))
-	s.Index(i).Set(t)
+	a, b := s.Index(i).Uint(), s.Index(j).Uint()
+	s.Index(i).SetUint(b)
+	s.Index(j).SetUint(a)
 }
 
 type sortFloatSlice struct {
@@ -100,9 +100,9 @@ func (s sortFloatSlice) Less(i, j int) bool {
 }
 
 func (s sortFloatSlice) Swap(i, j int) {
-	t := s.Index(j)
-	s.Index(j).Set(s.Index(i))
-	s.Index(i).Set(t)
+	a, b := s.Index(i).Float(), s.Index(j).Float()
+	s.Index(i).SetFloat(b)
+	s.Index(j).SetFloat(a)
 }
 
 type sortStringSlice struct {
@@ -118,7 +118,7 @@ func (s sortStringSlice) Less(i, j int) bool {
 }
 
 func (s sortStringSlice) Swap(i, j int) {
-	t := s.Index(j)
-	s.Index(j).Set(s.Index(i))
-	s.Index(i).Set(t)
+	a, b := s.Index(i).String(), s.Index(j).String()
+	s.Index(i).SetString(b)
+	s.Index(j).SetString(a)
 }
