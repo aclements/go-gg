@@ -169,8 +169,14 @@ func (p *Plot) SetScaleAt(aes string, s Scaler, gid table.GroupID) *Plot {
 }
 
 // GetScale returns the scale for the given visual aesthetic used for
-// data in group gid.
-func (p *Plot) GetScale(aes string, gid table.GroupID) Scaler {
+// data in the root group.
+func (p *Plot) GetScale(aes string) Scaler {
+	return p.GetScaleAt(aes, table.RootGroupID)
+}
+
+// GetScaleAt returns the scale for the given visual aesthetic used
+// for data in group gid.
+func (p *Plot) GetScaleAt(aes string, gid table.GroupID) Scaler {
 	return p.getScales(aes).find(gid)
 }
 

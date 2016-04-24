@@ -213,7 +213,7 @@ func (f *FacetCommon) apply(p *Plot, dir string) {
 			nband = nsubplot.hBand
 		}
 		if f.SplitXScales {
-			scaler := p.GetScale("x", gid)
+			scaler := p.GetScaleAt("x", gid)
 			nscaler := scales[bandScale{nband, scaler}]
 			if nscaler == nil {
 				nscaler = scaler.CloneScaler()
@@ -222,7 +222,7 @@ func (f *FacetCommon) apply(p *Plot, dir string) {
 			p.SetScaleAt("x", nscaler, ngid)
 		}
 		if f.SplitYScales {
-			scaler := p.GetScale("y", gid)
+			scaler := p.GetScaleAt("y", gid)
 			nscaler := scales[bandScale{nband, scaler}]
 			if nscaler == nil {
 				nscaler = scaler.CloneScaler()
