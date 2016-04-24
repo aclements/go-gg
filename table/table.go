@@ -33,6 +33,11 @@ import (
 // Rename Table to T?
 //
 // Make Table an interface? Then columns could be constructed lazily.
+//
+// Do all transformation functions as func(g Grouping) Grouping? That
+// could be a "Transform" type that has easy methods for chaining. In
+// a lot of cases, transformation functions could just return the
+// Transform returned by another function (like MapTables).
 
 // A Table is an immutable, ordered two dimensional relation. It
 // consists of a set of named columns. Each column is a sequence of

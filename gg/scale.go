@@ -118,12 +118,14 @@ type ContinuousScaler interface {
 
 	// TODO: There are two variations on min/max. 1) We can force
 	// the min/max, even if there's data beyond it. 2) We can say
-	// min/max has to be at least something, but data can expand
-	// beyond it. In the latter case, maybe min/max doesn't matter
-	// and it's just "include this point".
+	// cap the scale to some min/max, but a smaller range is okay.
 
 	SetMin(v float64) ContinuousScaler
 	SetMax(v float64) ContinuousScaler
+
+	// TODO: Should Include take an interface{} and work on any
+	// Scalar?
+
 	Include(v float64) ContinuousScaler
 }
 
@@ -489,6 +491,12 @@ func (s *linearScale) CloneScaler() Scaler {
 	s2 := *s
 	return &s2
 }
+
+// TODO: The ordinal scale can only work with values it actually sees
+// in the data. It has no sense of the type's actual domain. If the
+// type is an enumerated type, we could fill in intermediate values
+// and the caller could set a min and max for the scale to enumerate
+// between.
 
 func NewOrdinalScale() Scaler {
 	return &ordinalScale{}

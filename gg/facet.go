@@ -27,6 +27,10 @@ import (
 
 // TODO: Is this flexible enough to make marginal distribution plots?
 
+// TODO: There's logical overlap between how a facet chooses to
+// position and label a subplot and a discrete-ranged scalar. Perhaps
+// facets should use scalars to chose positions and labels?
+
 // FacetCommon is the base type for plot faceting operations. Faceting
 // is a grouping operation that subdivides a plot into subplots based
 // on the values in data column. Faceting operations may be composed:
