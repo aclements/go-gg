@@ -470,7 +470,7 @@ func (s *linearScale) Ticks(max int, pred func(major []float64, labels []string)
 		}
 		// Otherwise, just format them as floats.
 		for i, x := range major {
-			labels[i] = fmt.Sprintf("%g", x)
+			labels[i] = fmt.Sprintf("%.6g", x)
 		}
 		return labels
 	}
