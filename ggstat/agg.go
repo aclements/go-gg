@@ -20,23 +20,25 @@ import (
 //
 // TODO: Does this belong in ggstat? The specific aggregator functions
 // probably do, but the concept could go in package table.
-func Agg(x string, aggs ...Aggregator) Aggregate {
-	return Aggregate{x, aggs}
+func Agg(xs ...string) func(aggs ...Aggregator) Aggregate {
+	return func(aggs ...Aggregator) Aggregate {
+		return Aggregate{xs, aggs}
+	}
 }
 
 // Aggregate computes aggregate functions of a table grouped by
-// distinct values of the X column.
+// distinct values of a column or set of columns.
 //
-// The result of Aggregate will have a column named the same as column
-// X that consists of the distinct values of the X column, in addition
-// to constant columns from the input. The names of any other columns
-// are determined by the Aggregators.
+// Aggregate first groups the table by the Xs columns. Each of these
+// groups produces a single row in the output table, where the unique
+// value of each of the Xs columns appears in the output row, along
+// with constant columns from the input. Additional columns in the
+// output row are produced by applying the Aggregator functions to the
+// group.
 type Aggregate struct {
-	// X is the name of the column to group values by before
+	// Xs is the list column names to group values by before
 	// computing aggregate functions.
-	//
-	// TODO: Make this optional?
-	X string
+	Xs []string
 
 	// Aggregators is the set of Aggregator functions to apply to
 	// each group of values.
@@ -50,25 +52,30 @@ type Aggregator func(input table.Grouping, output *table.Builder)
 
 func (s Aggregate) F(g table.Grouping) table.Grouping {
 	return table.MapTables(g, func(_ table.GroupID, t *table.Table) *table.Table {
-		g := table.GroupBy(t, s.X)
+		g := table.GroupBy(t, s.Xs...)
+		var nt table.Builder
 
-		// Construct X column.
+		// Construct X columns.
 		rows := len(g.Tables())
-		xs := reflect.MakeSlice(reflect.TypeOf(t.MustColumn(s.X)), rows, rows)
-		for i, gid := range g.Tables() {
-			xs.Index(i).Set(reflect.ValueOf(gid.Label()))
-		}
+		for colidx, xcol := range s.Xs {
+			xs := reflect.MakeSlice(reflect.TypeOf(t.MustColumn(xcol)), rows, rows)
+			for i, gid := range g.Tables() {
+				for j := 0; j < len(s.Xs)-colidx-1; j++ {
+					gid = gid.Parent()
+				}
+				xs.Index(i).Set(reflect.ValueOf(gid.Label()))
+			}
 
-		// Start new table.
-		nt := new(table.Builder).Add(s.X, xs.Interface())
+			nt.Add(xcol, xs.Interface())
+		}
 
 		// Apply Aggregators.
 		for _, agg := range s.Aggregators {
-			agg(g, nt)
+			agg(g, &nt)
 		}
 
 		// Keep constant columns.
-		preserveConsts(nt, t)
+		preserveConsts(&nt, t)
 		return nt.Done()
 	})
 }
