@@ -713,14 +713,7 @@ func (r *defaultColorRanger) Map(x float64) interface{} {
 	// of absolute luminance, they are reasonably spaced in terms
 	// of perceptual difference.
 	x = math.Max(0, math.Min(1, x)) // Clamp.
-	rb, g := float64(0), x*(256+64)
-	if g < 0 {
-		g = 0
-	} else if g > 255 {
-		rb = g - 255
-		g = 255
-	}
-	return color.RGBA{uint8(rb), uint8(g), uint8(rb), 0xff}
+	return color.RGBA{uint8(138 * x), uint8(226 * x), uint8(52 * x), 0xff}
 }
 
 func (r *defaultColorRanger) Unmap(y interface{}) (float64, bool) {
@@ -729,10 +722,7 @@ func (r *defaultColorRanger) Unmap(y interface{}) (float64, bool) {
 		return 0, false
 
 	case color.RGBA:
-		if y.R != y.B || (y.R != 0 && y.G != 0xff) || y.R > 65 {
-			return 0, false
-		}
-		return float64(y.R+y.G) / float64(256+64), true
+		return float64(y.G) / float64(226), true
 	}
 }
 
