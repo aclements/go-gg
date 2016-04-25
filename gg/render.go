@@ -339,9 +339,17 @@ func (e *eltTicks) render(r *eltRender) {
 }
 
 func (e *eltLabel) render(r *eltRender) {
-	// TODO: Clip to label region.
 	svg := r.svg
 	x, y, w, h := e.Layout()
+
+	// Clip to label region.
+	clipId, clipRef := r.genid("clip")
+	svg.ClipPath(`id="` + clipId + `"`)
+	svg.Rect(int(x), int(y), int(w), int(h))
+	svg.ClipEnd()
+	svg.Group(`clip-path="` + clipRef + `"`)
+	defer svg.Gend()
+
 	if e.fill != "none" {
 		svg.Rect(int(x), int(y), int(w), int(h), "fill: "+e.fill)
 	}
