@@ -275,7 +275,7 @@ func defaultRanger(aes string) Ranger {
 		return &defaultColorRanger{}
 
 	case "opacity":
-		return NewFloatRanger(0, 1)
+		return NewFloatRanger(0.1, 1)
 
 	case "size":
 		// Default to ranging between 1% and 10% of the
