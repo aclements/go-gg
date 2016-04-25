@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"math/rand"
 	"reflect"
 	"strings"
 
@@ -206,6 +207,14 @@ func (e *eltSubplot) render(svg *svg.SVG) {
 	x, y, w, h := e.Layout()
 	m := e.plotMargins
 
+	// Create clip region for plot area.
+	clipId := fmt.Sprintf("clip%d", rand.Int63())
+	svg.ClipPath(`id="` + clipId + `"`)
+	svg.Rect(int(x), int(y), int(w), int(h))
+	svg.ClipEnd()
+	svg.Group(`clip-path="url(#` + clipId + `)"`)
+	defer svg.Gend()
+
 	// Set scale ranges.
 	xRanger := NewFloatRanger(x+m.l, x+w-m.r)
 	yRanger := NewFloatRanger(y+h-m.b, y+m.t)
@@ -232,8 +241,6 @@ func (e *eltSubplot) render(svg *svg.SVG) {
 	}
 
 	// Render marks.
-	//
-	// TODO: Clip to plot area.
 	for _, mark := range e.marks {
 		for _, gid := range mark.groups {
 			env.gid = gid
