@@ -161,7 +161,12 @@ type LayerPoints struct {
 	// is multiplied by any alpha value specified by Color.
 	Opacity string
 
-	// XXX fill vs stroke, size, shape
+	// Size names the column that defines the size of each point.
+	// If Size is "", it defaults to 1% of the smallest plot
+	// dimension.
+	Size string
+
+	// XXX fill vs stroke, shape
 }
 
 func (l LayerPoints) Apply(p *Plot) {
@@ -172,12 +177,15 @@ func (l LayerPoints) Apply(p *Plot) {
 		// TODO: It's actually the fill color, but I generally
 		// want it to match things that are stroke colors.
 		// Maybe I should have a "color" aesthetic for the
-		// "primary" color?
+		// "primary" color? Or I could have a hierarchy of
+		// aesthetics, in which this uses "stroke" if it has a
+		// scale, but otherwise uses "color".
 		p.use("stroke", l.Color),
 		// TODO: What scale for opacity? Or should I assume
 		// callers will use PreScaled values if they want
 		// specific opacities? What's the physical type?
 		p.use("opacity", l.Opacity),
+		p.use("size", l.Size),
 	}, p.Data().Tables()})
 }
 

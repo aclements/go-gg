@@ -226,7 +226,10 @@ func (e *eltSubplot) render(svg *svg.SVG) {
 	}
 
 	// Create rendering environment.
-	env := &renderEnv{cache: make(map[renderCacheKey]table.Slice)}
+	env := &renderEnv{
+		cache: make(map[renderCacheKey]table.Slice),
+		area:  [4]float64{x, y, w, h},
+	}
 
 	// Render marks.
 	//
@@ -350,6 +353,7 @@ func (e *eltPadding) render(svg *svg.SVG) {
 type renderEnv struct {
 	gid   table.GroupID
 	cache map[renderCacheKey]table.Slice
+	area  [4]float64
 }
 
 type renderCacheKey struct {
@@ -397,6 +401,10 @@ func (env *renderEnv) getFirst(sd *scaledData) interface{} {
 		return nil
 	}
 	return v.scaler.Map(rv.Index(0).Interface())
+}
+
+func (env *renderEnv) Size() (w, h float64) {
+	return env.area[2], env.area[3]
 }
 
 func round(x float64) int {

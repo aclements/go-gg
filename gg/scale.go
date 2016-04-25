@@ -276,6 +276,11 @@ func defaultRanger(aes string) Ranger {
 
 	case "opacity":
 		return NewFloatRanger(0, 1)
+
+	case "size":
+		// Default to ranging between 1% and 10% of the
+		// minimum plot dimension.
+		return NewFloatRanger(0.01, 0.1)
 	}
 
 	panic(fmt.Sprintf("unknown aesthetic %q", aes))
