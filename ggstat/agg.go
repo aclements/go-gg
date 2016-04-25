@@ -185,10 +185,9 @@ func AggUnique(cols ...string) Aggregator {
 		if len(input.Tables()) == 0 {
 			panic(fmt.Sprintf("unknown column: %q", cols[0]))
 		}
-		i0 := input.Table(input.Tables()[0])
 
 		for _, col := range cols {
-			ctype := reflect.TypeOf(i0.MustColumn(col))
+			ctype := table.ColType(input, col)
 			rows := len(input.Tables())
 			vs := reflect.MakeSlice(ctype, rows, rows)
 			for i, gid := range input.Tables() {

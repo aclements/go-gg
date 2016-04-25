@@ -38,6 +38,8 @@ import (
 // could be a "Transform" type that has easy methods for chaining. In
 // a lot of cases, transformation functions could just return the
 // Transform returned by another function (like MapTables).
+//
+// Make an error type for "unknown column".
 
 // A Table is an immutable, ordered two dimensional relation. It
 // consists of a set of named columns. Each column is a sequence of
@@ -465,4 +467,22 @@ func (g *groupedTable) Tables() []GroupID {
 
 func (g *groupedTable) Table(gid GroupID) *Table {
 	return g.tables[gid]
+}
+
+// ColType returns the type of column col in g. This will always be a
+// slice type, even if col is a constant column. ColType panics if col
+// is unknown.
+//
+// TODO: If I introduce a first-class representation for a grouped
+// column, this should probably be in that.
+func ColType(g Grouping, col string) reflect.Type {
+	tables := g.Tables()
+	if len(tables) == 0 {
+		panic(fmt.Sprintf("unknown column %q", col))
+	}
+	t0 := g.Table(tables[0])
+	if cv, ok := t0.Const(col); ok {
+		return reflect.SliceOf(reflect.TypeOf(cv))
+	}
+	return reflect.TypeOf(t0.MustColumn(col))
 }

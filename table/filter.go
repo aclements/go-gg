@@ -32,9 +32,8 @@ func Filter(g Grouping, pred interface{}, cols ...string) Grouping {
 		panic(fmt.Sprintf("unknown column %q", cols[0]))
 	}
 	// Type check arguments.
-	t0 := g.Table(g.Tables()[0])
 	for i, col := range cols {
-		colt := reflect.TypeOf(t0.MustColumn(col))
+		colt := ColType(g, col)
 		if !colt.Elem().AssignableTo(predt.In(i)) {
 			panic(fmt.Sprintf("column %d (type %s) is not assignable to predicate argument %d (type %s)", i, colt.Elem(), i, predt.In(i)))
 		}

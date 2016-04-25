@@ -4,11 +4,7 @@
 
 package gg
 
-import (
-	"reflect"
-
-	"github.com/aclements/go-gg/table"
-)
+import "github.com/aclements/go-gg/table"
 
 // TODO: GroupByKey? Would the key function only work on one binding?
 // With a first-class row representation we could pass that.
@@ -32,9 +28,9 @@ func (p *Plot) GroupBy(cols ...string) *Plot {
 func (p *Plot) GroupAuto() *Plot {
 	// Find the categorical columns.
 	categorical := []string{}
-	tab := p.Data().Table(p.Data().Tables()[0])
-	for _, col := range tab.Columns() {
-		et := reflect.TypeOf(tab.Column(col)).Elem()
+	g := p.Data()
+	for _, col := range g.Columns() {
+		et := table.ColType(g, col).Elem()
 		if et.Comparable() && !isCardinal(et.Kind()) {
 			categorical = append(categorical, col)
 		}

@@ -103,14 +103,9 @@ func (s Normalize) F(g table.Grouping) table.Grouping {
 }
 
 func colTypes(g table.Grouping) []reflect.Type {
-	tables := g.Tables()
-	if tables == nil {
-		return nil
-	}
-	t0 := g.Table(tables[0])
-	cts := make([]reflect.Type, len(t0.Columns()))
-	for i, c := range t0.Columns() {
-		cts[i] = reflect.TypeOf(t0.Column(c))
+	cts := make([]reflect.Type, len(g.Columns()))
+	for i, col := range g.Columns() {
+		cts[i] = table.ColType(g, col)
 	}
 	return cts
 }
