@@ -6,6 +6,7 @@ package gg
 
 import (
 	"fmt"
+	"math"
 	"reflect"
 
 	"github.com/aclements/go-gg/generic"
@@ -15,8 +16,6 @@ import (
 // TODO: What if there are already layers? Maybe they should be
 // repeated in all facets. ggplot2 apparently does this when the
 // faceting variable isn't in one of the data frames.
-
-// TODO: FacetWrap
 
 // TODO: Subplot is getting rather complicated. If I want to make
 // facets only use public APIs, perhaps gg itself should only know
@@ -76,6 +75,13 @@ type FacetCommon struct {
 	// TODO: Call this through reflect to get the argument type
 	// right?
 	Labeler func(interface{}) string
+
+	// Rows and Cols specify the number of rows or columns for
+	// FacetWrap. If both are zero, FacetWrap chooses reasonable
+	// defaults. Otherwise, one or the other should be zero.
+	Rows, Cols int
+
+	// TODO: Wrap order and label side for FacetWrap.
 }
 
 // FacetX splits a plot into columns.
@@ -84,12 +90,19 @@ type FacetX FacetCommon
 // FacetY splits a plot into rows.
 type FacetY FacetCommon
 
+// FacetWrap splits a plot into a grid of rows and columns.
+type FacetWrap FacetCommon
+
 func (f FacetX) Apply(p *Plot) {
 	(*FacetCommon)(&f).apply(p, "x")
 }
 
 func (f FacetY) Apply(p *Plot) {
 	(*FacetCommon)(&f).apply(p, "y")
+}
+
+func (f FacetWrap) Apply(p *Plot) {
+	(*FacetCommon)(&f).apply(p, "-")
 }
 
 func (f *FacetCommon) apply(p *Plot, dir string) {
@@ -144,15 +157,41 @@ func (f *FacetCommon) apply(p *Plot, dir string) {
 		}
 	}
 
+	// Compute FacetWrap rows and cols.
+	if dir == "-" {
+		cells := float64(len(vals))
+		if f.Cols == 0 {
+			if f.Rows == 0 {
+				// Chose default Rows and Cols.
+				f.Rows = int(math.Ceil(math.Sqrt(cells)))
+			}
+			// Compute Cols from Rows.
+			f.Cols = int(math.Ceil(cells / float64(f.Rows)))
+		} else {
+			// Compute Rows from Cols.
+			f.Rows = int(math.Ceil(cells / float64(f.Cols)))
+		}
+	}
+
 	// Find existing subplots, split existing subplots and bands
 	// into len(vals) new subplots and bands, and transform each
 	// GroupBy group into its new subplot.
+	type bandKey struct {
+		// band1 is the primary band. band2 is only used by
+		// FacetWrap.
+		band1, band2 *subplotBand
+
+		// X and Y of band. This is a necessary part of the
+		// key because FacetWrap creates rows but does not
+		// create distant horizontal bands for them.
+		x, y int
+	}
 	type bandScale struct {
 		band  *subplotBand
 		scale Scaler
 	}
 	subplots := make(map[*subplot][]*subplot)
-	bands := make(map[*subplotBand][]*subplotBand)
+	bands := make(map[bandKey][]*subplotBand)
 	scales := make(map[bandScale]Scaler)
 	var ndata table.GroupingBuilder
 	for _, gid := range grouped.Tables() {
@@ -161,20 +200,22 @@ func (f *FacetCommon) apply(p *Plot, dir string) {
 
 		// Split old band into len(vals) new bands in the
 		// orthogonal axis.
-		var band *subplotBand
+		var obandKey bandKey
 		if dir == "x" {
-			band = sub.vBand
+			obandKey = bandKey{band1: sub.vBand, x: sub.x}
+		} else if dir == "y" {
+			obandKey = bandKey{band1: sub.hBand, y: sub.y}
 		} else {
-			band = sub.hBand
+			obandKey = bandKey{sub.vBand, sub.hBand, sub.x, sub.y}
 		}
-		nbands := bands[band]
+		nbands := bands[obandKey]
 		if nbands == nil {
 			nbands = make([]*subplotBand, len(vals))
 			for _, val := range vals {
-				nb := &subplotBand{parent: band, label: val.label}
+				nb := &subplotBand{parent: obandKey.band1, label: val.label}
 				nbands[val.index] = nb
 			}
-			bands[band] = nbands
+			bands[obandKey] = nbands
 		}
 
 		// Split old subplot into len(vals) new subplots.
@@ -187,9 +228,13 @@ func (f *FacetCommon) apply(p *Plot, dir string) {
 				if dir == "x" {
 					ns.x = sub.x*len(vals) + val.index
 					ns.vBand = nbands[val.index]
-				} else {
+				} else if dir == "y" {
 					ns.y = sub.y*len(vals) + val.index
 					ns.hBand = nbands[val.index]
+				} else {
+					ns.x = sub.x*f.Cols + val.index%f.Cols
+					ns.y = sub.y*f.Rows + val.index/f.Cols
+					ns.vBand = nbands[val.index]
 				}
 				nsubplots[val.index] = ns
 			}
@@ -209,8 +254,18 @@ func (f *FacetCommon) apply(p *Plot, dir string) {
 		var nband *subplotBand
 		if dir == "x" {
 			nband = nsubplot.vBand
-		} else {
+		} else if dir == "y" {
 			nband = nsubplot.hBand
+		} else {
+			if f.SplitXScales || f.SplitYScales {
+				// TODO: I probably need to rephrase
+				// this whole scale splitting
+				// operation in terms of subplot X and
+				// Y and possibly do it as a second
+				// pass once all of the subplots are
+				// created.
+				panic("not implemented: scale splitting for FacetWrap")
+			}
 		}
 		if f.SplitXScales {
 			scaler := p.GetScaleAt("x", gid)
