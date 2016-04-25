@@ -5,6 +5,7 @@
 package gg
 
 import (
+	"fmt"
 	"math"
 	"sort"
 
@@ -53,8 +54,20 @@ type plotElt interface {
 	// are the same as xPath and yPath.
 	paths() (xPath, yPath, x2Path, y2Path eltPath)
 
-	// render draws this plot element to svg.
-	render(svg *svg.SVG)
+	// render draws this plot element to r.svg.
+	render(r *eltRender)
+}
+
+type eltRender struct {
+	svg *svg.SVG
+	id  int
+}
+
+func (r *eltRender) genid(prefix string) (id, ref string) {
+	id = fmt.Sprintf("%s%d", prefix, r.id)
+	ref = "url(#" + id + ")"
+	r.id++
+	return
 }
 
 type eltCommon struct {

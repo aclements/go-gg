@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"math/rand"
 	"reflect"
 	"strings"
 
@@ -196,23 +195,25 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 	defer svg.End()
 
 	// Render each plot element.
+	r := &eltRender{svg, 0}
 	for _, elt := range plotElts {
-		elt.render(svg)
+		elt.render(r)
 	}
 
 	return nil
 }
 
-func (e *eltSubplot) render(svg *svg.SVG) {
+func (e *eltSubplot) render(r *eltRender) {
+	svg := r.svg
 	x, y, w, h := e.Layout()
 	m := e.plotMargins
 
 	// Create clip region for plot area.
-	clipId := fmt.Sprintf("clip%d", rand.Int63())
+	clipId, clipRef := r.genid("clip")
 	svg.ClipPath(`id="` + clipId + `"`)
 	svg.Rect(int(x), int(y), int(w), int(h))
 	svg.ClipEnd()
-	svg.Group(`clip-path="url(#` + clipId + `)"`)
+	svg.Group(`clip-path="` + clipRef + `"`)
 	defer svg.Gend()
 
 	// Set scale ranges.
@@ -254,11 +255,11 @@ func (e *eltSubplot) render(svg *svg.SVG) {
 	return
 
 	// Render border.
-	r := func(x float64) float64 {
+	rnd := func(x float64) float64 {
 		// Round to nearest N.
 		return math.Floor(x + 0.5)
 	}
-	svg.Path(fmt.Sprintf("M%g %gV%gH%g", r(x), r(y), r(y+h), r(x+w)), "stroke:#888; fill:none; stroke-width:2") // TODO: Theme.
+	svg.Path(fmt.Sprintf("M%g %gV%gH%g", rnd(x), rnd(y), rnd(y+h), rnd(x+w)), "stroke:#888; fill:none; stroke-width:2") // TODO: Theme.
 
 	// Render scale ticks.
 	for s := range e.scales["x"] {
@@ -321,7 +322,8 @@ func renderScale(svg *svg.SVG, dir rune, scale Scaler, ticks plotEltTicks, pos f
 	svg.Path(strings.Join(path, ""), "stroke:#888; stroke-width:2") // TODO: Theme
 }
 
-func (e *eltTicks) render(svg *svg.SVG) {
+func (e *eltTicks) render(r *eltRender) {
+	svg := r.svg
 	x, y, w, _ := e.Layout()
 	for s := range e.scales() {
 		pos := e.mapTicks(s, e.ticks[s].major)
@@ -336,8 +338,9 @@ func (e *eltTicks) render(svg *svg.SVG) {
 	}
 }
 
-func (e *eltLabel) render(svg *svg.SVG) {
+func (e *eltLabel) render(r *eltRender) {
 	// TODO: Clip to label region.
+	svg := r.svg
 	x, y, w, h := e.Layout()
 	if e.fill != "none" {
 		svg.Rect(int(x), int(y), int(w), int(h), "fill: "+e.fill)
@@ -354,7 +357,7 @@ func (e *eltLabel) render(svg *svg.SVG) {
 	svg.Text(int(x+w/2), int(y+h/2), e.label, style)
 }
 
-func (e *eltPadding) render(svg *svg.SVG) {
+func (e *eltPadding) render(r *eltRender) {
 }
 
 type renderEnv struct {
