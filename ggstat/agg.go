@@ -11,9 +11,10 @@ import (
 	"github.com/aclements/go-gg/generic"
 	"github.com/aclements/go-gg/table"
 	"github.com/aclements/go-moremath/stats"
+	"github.com/aclements/go-moremath/vec"
 )
 
-// TODO: AggFirst, AggTukey, AggMin/Max/Sum
+// TODO: AggFirst, AggTukey. StdDev? Percentiles?
 
 // Agg constructs an Aggregate transform from a grouping column and a
 // set of Aggregators.
@@ -101,9 +102,49 @@ func AggCount(label string) Aggregator {
 // each of cols. The resulting columns will be named "mean <col>" and
 // will have the same type as <col>.
 func AggMean(cols ...string) Aggregator {
+	return aggFn(stats.Mean, "mean ", cols...)
+}
+
+// AggGeoMean returns an aggregate function that computes the
+// geometric mean of each of cols. The resulting columns will be named
+// "geomean <col>" and will have the same type as <col>.
+func AggGeoMean(cols ...string) Aggregator {
+	return aggFn(stats.GeoMean, "geomean ", cols...)
+}
+
+// AggMin returns an aggregate function that computes the minimum of
+// each of cols. The resulting columns will be named "min <col>" and
+// will have the same type as <col>.
+func AggMin(cols ...string) Aggregator {
+	min := func(xs []float64) float64 {
+		x, _ := stats.Bounds(xs)
+		return x
+	}
+	return aggFn(min, "min ", cols...)
+}
+
+// AggMax returns an aggregate function that computes the maximum of
+// each of cols. The resulting columns will be named "max <col>" and
+// will have the same type as <col>.
+func AggMax(cols ...string) Aggregator {
+	max := func(xs []float64) float64 {
+		_, x := stats.Bounds(xs)
+		return x
+	}
+	return aggFn(max, "max ", cols...)
+}
+
+// AggSum returns an aggregate function that computes the sum of each
+// of cols. The resulting columns will be named "sum <col>" and will
+// have the same type as <col>.
+func AggSum(cols ...string) Aggregator {
+	return aggFn(vec.Sum, "sum ", cols...)
+}
+
+func aggFn(f func([]float64) float64, prefix string, cols ...string) Aggregator {
 	ocols := make([]string, len(cols))
 	for i, col := range cols {
-		ocols[i] = "mean " + col
+		ocols[i] = prefix + col
 	}
 
 	return func(input table.Grouping, b *table.Builder) {
@@ -118,7 +159,7 @@ func AggMean(cols ...string) Aggregator {
 					ct = reflect.TypeOf(v)
 				}
 				generic.ConvertSlice(&xs, v)
-				means = append(means, stats.Mean(xs))
+				means = append(means, f(xs))
 			}
 
 			if ct == float64SliceType {
