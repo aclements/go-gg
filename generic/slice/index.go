@@ -4,7 +4,11 @@
 
 package slice
 
-import "reflect"
+import (
+	"reflect"
+
+	"github.com/aclements/go-gg/generic"
+)
 
 // MultiIndex returns a slice w such that w[i] = v[indexes[i]].
 func MultiIndex(v Slice, indexes []int) Slice {
@@ -45,7 +49,7 @@ func MultiIndex(v Slice, indexes []int) Slice {
 func CopyIndex(out, in Slice, indexes []int) {
 	// TODO: Maybe they should only have to be assignable?
 	if it, ot := reflect.TypeOf(in), reflect.TypeOf(out); it != ot {
-		panic(&TypeError{it, ot, "must be the same type"})
+		panic(&generic.TypeError{it, ot, "must be the same type"})
 	}
 
 	switch in := in.(type) {

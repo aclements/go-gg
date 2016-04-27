@@ -4,11 +4,15 @@
 
 package slice
 
-import "reflect"
+import (
+	"reflect"
+
+	"github.com/aclements/go-gg/generic"
+)
 
 // Concat returns the concatenation of all of ss. The types of all of
 // the arguments must be identical or Concat will panic with a
-// *TypeError. The returned slice will have the same type as the
+// *generic.TypeError. The returned slice will have the same type as the
 // inputs. If there are 0 arguments, Concat returns nil. Concat does
 // not modify any of the input slices.
 func Concat(ss ...Slice) Slice {
@@ -25,7 +29,7 @@ func Concat(ss ...Slice) Slice {
 		if i == 0 {
 			typ = rvs[i].Type()
 		} else if rvs[i].Type() != typ {
-			panic(&TypeError{typ, rvs[i].Type(), "have different types"})
+			panic(&generic.TypeError{typ, rvs[i].Type(), "have different types"})
 		}
 	}
 

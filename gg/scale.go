@@ -10,6 +10,7 @@ import (
 	"math"
 	"reflect"
 
+	"github.com/aclements/go-gg/generic"
 	"github.com/aclements/go-gg/generic/slice"
 	"github.com/aclements/go-gg/table"
 	"github.com/aclements/go-moremath/scale"
@@ -172,7 +173,7 @@ func (s *defaultScale) ExpandDomain(v table.Slice) {
 		var err error
 		s.scale, err = DefaultScale(v)
 		if err != nil {
-			panic(&slice.TypeError{reflect.TypeOf(v), nil, err.Error()})
+			panic(&generic.TypeError{reflect.TypeOf(v), nil, err.Error()})
 		}
 		if s.r != nil {
 			s.scale.Ranger(s.r)

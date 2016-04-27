@@ -4,7 +4,11 @@
 
 package slice
 
-import "reflect"
+import (
+	"reflect"
+
+	"github.com/aclements/go-gg/generic"
+)
 
 // Index returns the index of the first instance of val in s, or -1 if
 // val is not present in s. val's type must be s's element type.
@@ -12,7 +16,7 @@ func Index(s Slice, val interface{}) int {
 	rs := reflectSlice(s)
 	if vt := reflect.TypeOf(val); rs.Type().Elem() != vt {
 		// TODO: Better "<seq> is not a sequence of <val>".
-		panic(&TypeError{rs.Type(), vt, "cannot find"})
+		panic(&generic.TypeError{rs.Type(), vt, "cannot find"})
 	}
 
 	for i, l := 0, rs.Len(); i < l; i++ {
@@ -29,7 +33,7 @@ func LastIndex(s Slice, val interface{}) int {
 	rs := reflectSlice(s)
 	if vt := reflect.TypeOf(val); rs.Type().Elem() != vt {
 		// TODO: Better "<seq> is not a sequence of <val>".
-		panic(&TypeError{rs.Type(), vt, "cannot find"})
+		panic(&generic.TypeError{rs.Type(), vt, "cannot find"})
 	}
 
 	for i := rs.Len() - 1; i >= 0; i-- {

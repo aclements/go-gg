@@ -4,21 +4,25 @@
 
 package slice
 
-import "reflect"
+import (
+	"reflect"
+
+	"github.com/aclements/go-gg/generic"
+)
 
 // A Slice is a Go slice value.
 //
 // This is primarily for documentation. There is no way to statically
 // enforce this in Go; however, functions that expect a Slice will
-// panic with a *TypeError if passed a non-slice value.
+// panic with a *generic.TypeError if passed a non-slice value.
 type Slice interface{}
 
 // reflectSlice checks that s is a slice and returns its
-// reflect.Value. It panics with a *TypeError if s is not a slice.
+// reflect.Value. It panics with a *generic.TypeError if s is not a slice.
 func reflectSlice(s Slice) reflect.Value {
 	rv := reflect.ValueOf(s)
 	if rv.Kind() != reflect.Slice {
-		panic(&TypeError{rv.Type(), nil, "is not a slice"})
+		panic(&generic.TypeError{rv.Type(), nil, "is not a slice"})
 	}
 	return rv
 }

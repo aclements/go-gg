@@ -7,6 +7,8 @@ package slice
 import (
 	"reflect"
 	"sort"
+
+	"github.com/aclements/go-gg/generic"
 )
 
 // CanSort returns whether the value v can be sorted.
@@ -14,7 +16,7 @@ func CanSort(v interface{}) bool {
 	if _, ok := v.(sort.Interface); ok {
 		return true
 	}
-	return CanOrderR(reflect.TypeOf(v).Elem().Kind())
+	return generic.CanOrderR(reflect.TypeOf(v).Elem().Kind())
 }
 
 // Sort sorts v in increasing order. v must implement sort.Interface
@@ -48,7 +50,7 @@ func Sorter(v interface{}) sort.Interface {
 	case reflect.String:
 		return sortStringSlice{rv}
 	}
-	panic(&TypeError{rv.Type().Elem(), nil, "is not orderable"})
+	panic(&generic.TypeError{rv.Type().Elem(), nil, "is not orderable"})
 }
 
 type sortIntSlice struct {

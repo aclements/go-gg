@@ -4,7 +4,11 @@
 
 package slice
 
-import "reflect"
+import (
+	"reflect"
+
+	"github.com/aclements/go-gg/generic"
+)
 
 // ConvertSlice converts each element in from and assigns it to *to.
 // to must be a pointer to a slice. ConvertSlice slices or extends *to
@@ -15,11 +19,11 @@ func ConvertSlice(to interface{}, from Slice) {
 	fv := reflectSlice(from)
 	tv := reflect.ValueOf(to)
 	if tv.Kind() != reflect.Ptr {
-		panic(&TypeError{tv.Type(), nil, "is not a *[]T"})
+		panic(&generic.TypeError{tv.Type(), nil, "is not a *[]T"})
 	}
 	tst := tv.Type().Elem()
 	if tst.Kind() != reflect.Slice {
-		panic(&TypeError{tv.Type(), nil, "is not a *[]T"})
+		panic(&generic.TypeError{tv.Type(), nil, "is not a *[]T"})
 	}
 
 	if fv.Type().AssignableTo(tst) {
@@ -29,7 +33,7 @@ func ConvertSlice(to interface{}, from Slice) {
 
 	eltt := tst.Elem()
 	if !fv.Type().Elem().ConvertibleTo(eltt) {
-		panic(&TypeError{fv.Type(), tst, "cannot be converted"})
+		panic(&generic.TypeError{fv.Type(), tst, "cannot be converted"})
 	}
 
 	switch to := to.(type) {

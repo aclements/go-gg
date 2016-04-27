@@ -7,6 +7,8 @@ package slice
 import (
 	"reflect"
 	"sort"
+
+	"github.com/aclements/go-gg/generic"
 )
 
 // Min returns the minimum value in v. v must either implement
@@ -77,8 +79,8 @@ func minmax(v interface{}, keep int, val bool) (reflect.Value, int) {
 	}
 
 	rv := reflectSlice(v)
-	if !CanOrderR(rv.Type().Elem().Kind()) {
-		panic(&TypeError{rv.Type().Elem(), nil, "is not orderable"})
+	if !generic.CanOrderR(rv.Type().Elem().Kind()) {
+		panic(&generic.TypeError{rv.Type().Elem(), nil, "is not orderable"})
 	}
 	if rv.Len() == 0 {
 		if keep < 0 {
@@ -89,7 +91,7 @@ func minmax(v interface{}, keep int, val bool) (reflect.Value, int) {
 	}
 	max, maxi := rv.Index(0), 0
 	for i, len := 1, rv.Len(); i < len; i++ {
-		if elt := rv.Index(i); OrderR(elt, max) == keep {
+		if elt := rv.Index(i); generic.OrderR(elt, max) == keep {
 			max, maxi = elt, i
 		}
 	}

@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"strconv"
 
-	"github.com/aclements/go-gg/generic/slice"
+	"github.com/aclements/go-gg/generic"
 )
 
 // TableFromStructs converts a []T where T is a struct to a Table
@@ -17,7 +17,7 @@ func TableFromStructs(structs Slice) *Table {
 	s := reflectSlice(structs)
 	st := s.Type()
 	if st.Elem().Kind() != reflect.Struct {
-		panic(&slice.TypeError{st, nil, "is not a slice of struct"})
+		panic(&generic.TypeError{st, nil, "is not a slice of struct"})
 	}
 
 	var t Builder
