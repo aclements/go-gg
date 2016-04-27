@@ -10,7 +10,7 @@ import "reflect"
 // concatenating s to itself. If len(s) >= length, it returns
 // s[:length]. Otherwise, it allocates a new slice. If len(s) == 0 and
 // length != 0, Cycle panics.
-func Cycle(s Slice, length int) Slice {
+func Cycle(s T, length int) T {
 	rv := reflectSlice(s)
 	if rv.Len() >= length {
 		return rv.Slice(0, length).Interface()
@@ -32,7 +32,7 @@ func Cycle(s Slice, length int) Slice {
 }
 
 // Repeat returns a slice consisting of length copies of v.
-func Repeat(v interface{}, length int) Slice {
+func Repeat(v interface{}, length int) T {
 	if length < 0 {
 		length = 0
 	}

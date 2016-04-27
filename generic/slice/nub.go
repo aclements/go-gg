@@ -10,7 +10,7 @@ var trueVal = reflect.ValueOf(true)
 
 // Nub returns v with duplicates removed. It keeps the first instance
 // of each distinct value and preserves their order.
-func Nub(v Slice) Slice {
+func Nub(v T) T {
 	rv := reflectSlice(v)
 	indexes := make([]int, 0)
 	set := reflect.MakeMap(reflect.MapOf(rv.Type().Elem(), trueVal.Type()))
@@ -27,7 +27,7 @@ func Nub(v Slice) Slice {
 
 // NubAppend is equivalent to appending all of the slices in vs and
 // then calling Nub on the result, but more efficient.
-func NubAppend(vs ...Slice) Slice {
+func NubAppend(vs ...T) T {
 	if len(vs) == 0 {
 		return nil
 	}

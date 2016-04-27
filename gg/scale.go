@@ -509,7 +509,7 @@ func NewOrdinalScale() Scaler {
 }
 
 type ordinalScale struct {
-	allData []slice.Slice
+	allData []slice.T
 	r       Ranger
 	ordered table.Slice
 	index   map[interface{}]int
@@ -520,7 +520,7 @@ func (s *ordinalScale) ExpandDomain(v table.Slice) {
 	// type for "Color" and then a continuous type, this will
 	// crash confusingly only once Map calls makeIndex and
 	// NubAppend tries to make a consistently typed slice.
-	s.allData = append(s.allData, slice.Slice(v))
+	s.allData = append(s.allData, slice.T(v))
 	s.ordered, s.index = nil, nil
 }
 
@@ -596,7 +596,7 @@ func (s *ordinalScale) Ticks(max int, pred func(major []float64, labels []string
 
 func (s *ordinalScale) CloneScaler() Scaler {
 	ns := &ordinalScale{
-		allData: make([]slice.Slice, len(s.allData)),
+		allData: make([]slice.T, len(s.allData)),
 		r:       s.r,
 	}
 	for i, v := range s.allData {

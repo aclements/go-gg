@@ -15,7 +15,7 @@ import (
 // to len(from) and then assigns to[i] = T(from[i]) where T is the
 // type of *to's elements. If from and *to have the same element type,
 // it simply assigns *to = from.
-func ConvertSlice(to interface{}, from Slice) {
+func ConvertSlice(to interface{}, from T) {
 	fv := reflectSlice(from)
 	tv := reflect.ValueOf(to)
 	if tv.Kind() != reflect.Ptr {

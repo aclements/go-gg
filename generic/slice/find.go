@@ -12,7 +12,7 @@ import (
 
 // Index returns the index of the first instance of val in s, or -1 if
 // val is not present in s. val's type must be s's element type.
-func Index(s Slice, val interface{}) int {
+func Index(s T, val interface{}) int {
 	rs := reflectSlice(s)
 	if vt := reflect.TypeOf(val); rs.Type().Elem() != vt {
 		// TODO: Better "<seq> is not a sequence of <val>".
@@ -29,7 +29,7 @@ func Index(s Slice, val interface{}) int {
 
 // LastIndex returns the index of the last instance of val in s, or -1
 // if val is not present in s. val's type must be s's element type.
-func LastIndex(s Slice, val interface{}) int {
+func LastIndex(s T, val interface{}) int {
 	rs := reflectSlice(s)
 	if vt := reflect.TypeOf(val); rs.Type().Elem() != vt {
 		// TODO: Better "<seq> is not a sequence of <val>".
@@ -46,6 +46,6 @@ func LastIndex(s Slice, val interface{}) int {
 
 // Contains reports whether val is within s. val's type must be s's
 // element type.
-func Contains(s Slice, val interface{}) bool {
+func Contains(s T, val interface{}) bool {
 	return Index(s, val) >= 0
 }

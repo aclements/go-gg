@@ -230,7 +230,7 @@ func concatRows(tabs ...*Table) *Table {
 
 	// Construct each column.
 	var out Builder
-	seqs := make([]slice.Slice, len(tabs))
+	seqs := make([]slice.T, len(tabs))
 	for _, col := range tabs[0].Columns() {
 		seqs = seqs[:0]
 		for _, tab := range tabs {

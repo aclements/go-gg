@@ -15,7 +15,7 @@ import (
 // *generic.TypeError. The returned slice will have the same type as the
 // inputs. If there are 0 arguments, Concat returns nil. Concat does
 // not modify any of the input slices.
-func Concat(ss ...Slice) Slice {
+func Concat(ss ...T) T {
 	if len(ss) == 0 {
 		return nil
 	}

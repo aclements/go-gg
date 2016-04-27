@@ -14,7 +14,7 @@ import (
 // Min returns the minimum value in v. v must either implement
 // sort.Interface or its elements must be orderable. Min panics if v
 // is empty.
-func Min(v Slice) interface{} {
+func Min(v T) interface{} {
 	x, _ := minmax(v, -1, true)
 	return x.Interface()
 }
@@ -31,7 +31,7 @@ func ArgMin(v interface{}) int {
 // Max returns the maximum value in v. v must either implement
 // sort.Interface or its elements must be orderable. Max panics if v
 // is empty.
-func Max(v Slice) interface{} {
+func Max(v T) interface{} {
 	x, _ := minmax(v, 1, true)
 	return x.Interface()
 }

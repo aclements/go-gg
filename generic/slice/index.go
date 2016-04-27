@@ -11,7 +11,7 @@ import (
 )
 
 // MultiIndex returns a slice w such that w[i] = v[indexes[i]].
-func MultiIndex(v Slice, indexes []int) Slice {
+func MultiIndex(v T, indexes []int) T {
 	switch v := v.(type) {
 	case []int:
 		res := make([]int, len(indexes))
@@ -46,7 +46,7 @@ func MultiIndex(v Slice, indexes []int) Slice {
 // CopyIndex assigns out[i] = in[indexes[i]]. in and out must have the
 // same types and len(out) must be >= len(indexes). If in and out
 // overlap, the results are undefined.
-func CopyIndex(out, in Slice, indexes []int) {
+func CopyIndex(out, in T, indexes []int) {
 	// TODO: Maybe they should only have to be assignable?
 	if it, ot := reflect.TypeOf(in), reflect.TypeOf(out); it != ot {
 		panic(&generic.TypeError{it, ot, "must be the same type"})
