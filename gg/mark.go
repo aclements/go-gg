@@ -16,7 +16,7 @@ import (
 	"sort"
 	"strconv"
 
-	"github.com/aclements/go-gg/generic"
+	"github.com/aclements/go-gg/generic/slice"
 	"github.com/aclements/go-gg/table"
 	"github.com/aclements/go-moremath/stats"
 	"github.com/ajstarks/svgo"
@@ -142,7 +142,7 @@ func (m *markPoint) mark(env *renderEnv, canvas *svg.SVG) {
 	xs, ys := env.get(m.x).([]float64), env.get(m.y).([]float64)
 	var colors []color.Color
 	if m.color != nil {
-		generic.ConvertSlice(&colors, env.get(m.color))
+		slice.ConvertSlice(&colors, env.get(m.color))
 	}
 	var opacities []float64
 	if m.opacity != nil {
@@ -183,7 +183,7 @@ func (m *markTiles) mark(env *renderEnv, canvas *svg.SVG) {
 	// are color.Color? How would this work with an identity
 	// scaler?
 	var fills []color.Color
-	generic.ConvertSlice(&fills, env.get(m.fill))
+	slice.ConvertSlice(&fills, env.get(m.fill))
 
 	// TODO: We can't use an <image> this if the width and height
 	// are specified, or if there is a stroke.

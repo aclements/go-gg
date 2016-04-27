@@ -5,7 +5,7 @@
 package ggstat
 
 import (
-	"github.com/aclements/go-gg/generic"
+	"github.com/aclements/go-gg/generic/slice"
 	"github.com/aclements/go-gg/table"
 	"github.com/aclements/go-moremath/fit"
 	"github.com/aclements/go-moremath/vec"
@@ -66,8 +66,8 @@ func (s LeastSquares) F(g table.Grouping) table.Grouping {
 	return table.MapTables(g, func(gid table.GroupID, t *table.Table) *table.Table {
 		// TODO: We potentially convert each X column twice,
 		// since evalPoints also has to convert them.
-		generic.ConvertSlice(&xs, t.MustColumn(s.X))
-		generic.ConvertSlice(&ys, t.MustColumn(s.Y))
+		slice.ConvertSlice(&xs, t.MustColumn(s.X))
+		slice.ConvertSlice(&ys, t.MustColumn(s.Y))
 		eval := evals[gid]
 
 		r := fit.PolynomialRegression(xs, ys, nil, s.Degree)

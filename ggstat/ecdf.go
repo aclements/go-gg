@@ -5,7 +5,7 @@
 package ggstat
 
 import (
-	"github.com/aclements/go-gg/generic"
+	"github.com/aclements/go-gg/generic/slice"
 	"github.com/aclements/go-gg/table"
 	"github.com/aclements/go-moremath/vec"
 )
@@ -82,7 +82,7 @@ func (s ECDF) F(g table.Grouping) table.Grouping {
 		var ws []float64
 		xs := col[gid].data
 		if s.W != "" {
-			generic.ConvertSlice(&ws, t.MustColumn(s.W))
+			slice.ConvertSlice(&ws, t.MustColumn(s.W))
 		}
 
 		// Ignore empty tables.

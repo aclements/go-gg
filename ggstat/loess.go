@@ -7,7 +7,7 @@ package ggstat
 import (
 	"math"
 
-	"github.com/aclements/go-gg/generic"
+	"github.com/aclements/go-gg/generic/slice"
 	"github.com/aclements/go-gg/table"
 	"github.com/aclements/go-moremath/fit"
 	"github.com/aclements/go-moremath/stats"
@@ -77,8 +77,8 @@ func (s LOESS) F(g table.Grouping) table.Grouping {
 	return table.MapTables(g, func(gid table.GroupID, t *table.Table) *table.Table {
 		// TODO: We potentially convert each X column twice,
 		// since evalPoints also has to convert them.
-		generic.ConvertSlice(&xs, t.MustColumn(s.X))
-		generic.ConvertSlice(&ys, t.MustColumn(s.Y))
+		slice.ConvertSlice(&xs, t.MustColumn(s.X))
+		slice.ConvertSlice(&ys, t.MustColumn(s.Y))
 		eval := evals[gid]
 
 		loess := fit.LOESS(xs, ys, s.Degree, s.Span)
@@ -110,7 +110,7 @@ func evalPoints(g table.Grouping, x string, n int, widen float64, splitGroups bo
 		min, max := math.NaN(), math.NaN()
 		for _, gid := range g.Tables() {
 			t := g.Table(gid)
-			generic.ConvertSlice(&xs, t.MustColumn(x))
+			slice.ConvertSlice(&xs, t.MustColumn(x))
 			xmin, xmax := stats.Bounds(xs)
 			if xmin < min || math.IsNaN(min) {
 				min = xmin
@@ -139,7 +139,7 @@ func evalPoints(g table.Grouping, x string, n int, widen float64, splitGroups bo
 		t := g.Table(gid)
 
 		// Compute bounds.
-		generic.ConvertSlice(&xs, t.MustColumn(x))
+		slice.ConvertSlice(&xs, t.MustColumn(x))
 		min, max := stats.Bounds(xs)
 
 		// Widen bounds.

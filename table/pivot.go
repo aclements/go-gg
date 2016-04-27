@@ -7,7 +7,7 @@ package table
 import (
 	"reflect"
 
-	"github.com/aclements/go-gg/generic"
+	"github.com/aclements/go-gg/generic/slice"
 )
 
 // Pivot converts rows of g into columns. label and value must name
@@ -133,7 +133,7 @@ func Unpivot(g Grouping, label, value string, cols ...string) Grouping {
 			if i == 0 {
 				vt = colvs[i].Type()
 			} else if vt != colvs[i].Type() {
-				panic(&generic.TypeError{vt, colvs[i].Type(), "; cannot Unpivot columns with different types"})
+				panic(&slice.TypeError{vt, colvs[i].Type(), "; cannot Unpivot columns with different types"})
 			}
 		}
 

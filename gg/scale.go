@@ -10,7 +10,7 @@ import (
 	"math"
 	"reflect"
 
-	"github.com/aclements/go-gg/generic"
+	"github.com/aclements/go-gg/generic/slice"
 	"github.com/aclements/go-gg/table"
 	"github.com/aclements/go-moremath/scale"
 )
@@ -172,7 +172,7 @@ func (s *defaultScale) ExpandDomain(v table.Slice) {
 		var err error
 		s.scale, err = DefaultScale(v)
 		if err != nil {
-			panic(&generic.TypeError{reflect.TypeOf(v), nil, err.Error()})
+			panic(&slice.TypeError{reflect.TypeOf(v), nil, err.Error()})
 		}
 		if s.r != nil {
 			s.scale.Ranger(s.r)
@@ -252,7 +252,7 @@ func DefaultScale(seq table.Slice) (Scaler, error) {
 	case isCardinal(rtk):
 		return NewLinearScaler(), nil
 
-	case generic.CanSort(seq):
+	case slice.CanSort(seq):
 		return NewOrdinalScale(), nil
 
 	case rt.Comparable():
@@ -347,7 +347,7 @@ func (s *linearScale) ExpandDomain(v table.Slice) {
 	}
 
 	var data []float64
-	generic.ConvertSlice(&data, v)
+	slice.ConvertSlice(&data, v)
 	min, max := s.dataMin, s.dataMax
 	for _, v := range data {
 		if math.IsNaN(v) || math.IsInf(v, 0) {
@@ -508,7 +508,7 @@ func NewOrdinalScale() Scaler {
 }
 
 type ordinalScale struct {
-	allData []generic.Slice
+	allData []slice.Slice
 	r       Ranger
 	ordered table.Slice
 	index   map[interface{}]int
@@ -519,7 +519,7 @@ func (s *ordinalScale) ExpandDomain(v table.Slice) {
 	// type for "Color" and then a continuous type, this will
 	// crash confusingly only once Map calls makeIndex and
 	// NubAppend tries to make a consistently typed slice.
-	s.allData = append(s.allData, generic.Slice(v))
+	s.allData = append(s.allData, slice.Slice(v))
 	s.ordered, s.index = nil, nil
 }
 
@@ -541,8 +541,8 @@ func (s *ordinalScale) makeIndex() {
 	}
 
 	// Compute ordered data index and cache.
-	s.ordered = generic.NubAppend(s.allData...)
-	generic.Sort(s.ordered)
+	s.ordered = slice.NubAppend(s.allData...)
+	slice.Sort(s.ordered)
 	ov := reflect.ValueOf(s.ordered)
 	s.index = make(map[interface{}]int, ov.Len())
 	for i, len := 0, ov.Len(); i < len; i++ {
@@ -595,7 +595,7 @@ func (s *ordinalScale) Ticks(max int, pred func(major []float64, labels []string
 
 func (s *ordinalScale) CloneScaler() Scaler {
 	ns := &ordinalScale{
-		allData: make([]generic.Slice, len(s.allData)),
+		allData: make([]slice.Slice, len(s.allData)),
 		r:       s.r,
 	}
 	for i, v := range s.allData {

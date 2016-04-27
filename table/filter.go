@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/aclements/go-gg/generic"
+	"github.com/aclements/go-gg/generic/slice"
 )
 
 var boolType = reflect.TypeOf(false)
@@ -65,7 +65,7 @@ func Filter(g Grouping, pred interface{}, cols ...string) Grouping {
 		}
 		var nt Builder
 		for _, col := range t.Columns() {
-			nt.Add(col, generic.MultiIndex(t.Column(col), match))
+			nt.Add(col, slice.MultiIndex(t.Column(col), match))
 		}
 		return nt.Done()
 	})
@@ -87,7 +87,7 @@ func FilterEq(g Grouping, col string, val interface{}) Grouping {
 
 		var nt Builder
 		for _, col := range t.Columns() {
-			nt.Add(col, generic.MultiIndex(t.Column(col), match))
+			nt.Add(col, slice.MultiIndex(t.Column(col), match))
 		}
 		return nt.Done()
 	})

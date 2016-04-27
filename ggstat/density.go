@@ -7,7 +7,7 @@ package ggstat
 import (
 	"math"
 
-	"github.com/aclements/go-gg/generic"
+	"github.com/aclements/go-gg/generic/slice"
 	"github.com/aclements/go-gg/table"
 	"github.com/aclements/go-moremath/stats"
 	"github.com/aclements/go-moremath/vec"
@@ -109,9 +109,9 @@ func (d Density) F(g table.Grouping) table.Grouping {
 	for _, gid := range g.Tables() {
 		t := g.Table(gid)
 		var sample stats.Sample
-		generic.ConvertSlice(&sample.Xs, t.MustColumn(d.X))
+		slice.ConvertSlice(&sample.Xs, t.MustColumn(d.X))
 		if d.W != "" {
-			generic.ConvertSlice(&sample.Weights, t.MustColumn(d.W))
+			slice.ConvertSlice(&sample.Weights, t.MustColumn(d.W))
 		}
 		samples[gid] = sample
 	}

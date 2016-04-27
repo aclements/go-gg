@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/aclements/go-gg/generic"
+	"github.com/aclements/go-gg/generic/slice"
 	"github.com/aclements/go-gg/table"
 	"github.com/aclements/go-moremath/stats"
 	"github.com/aclements/go-moremath/vec"
@@ -158,7 +158,7 @@ func aggFn(f func([]float64) float64, prefix string, cols ...string) Aggregator 
 				if i == 0 {
 					ct = reflect.TypeOf(v)
 				}
-				generic.ConvertSlice(&xs, v)
+				slice.ConvertSlice(&xs, v)
 				means = append(means, f(xs))
 			}
 
@@ -167,7 +167,7 @@ func aggFn(f func([]float64) float64, prefix string, cols ...string) Aggregator 
 			} else {
 				// Convert means back to the type of col.
 				outptr := reflect.New(ct)
-				generic.ConvertSlice(outptr.Interface(), means)
+				slice.ConvertSlice(outptr.Interface(), means)
 				b.Add(ocols[coli], outptr.Elem().Interface())
 			}
 		}

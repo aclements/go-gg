@@ -7,7 +7,7 @@ package ggstat
 import (
 	"reflect"
 
-	"github.com/aclements/go-gg/generic"
+	"github.com/aclements/go-gg/generic/slice"
 	"github.com/aclements/go-gg/table"
 )
 
@@ -83,7 +83,7 @@ func (s Normalize) F(g table.Grouping) table.Grouping {
 		} else {
 			xs := t.MustColumn(s.X)
 			if s.By == nil {
-				drow = generic.ArgMin(xs)
+				drow = slice.ArgMin(xs)
 			} else {
 				byargs[0] = reflect.ValueOf(xs)
 				byout := byv.Call(byargs)

@@ -25,7 +25,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/aclements/go-gg/generic"
+	"github.com/aclements/go-gg/generic/slice"
 )
 
 // TODO
@@ -126,7 +126,7 @@ type Slice interface{}
 func reflectSlice(s Slice) reflect.Value {
 	rv := reflect.ValueOf(s)
 	if rv.Kind() != reflect.Slice {
-		panic(&generic.TypeError{rv.Type(), nil, "is not a slice"})
+		panic(&slice.TypeError{rv.Type(), nil, "is not a slice"})
 	}
 	return rv
 }
@@ -282,7 +282,7 @@ func (t *Table) Column(name string) Slice {
 
 	if cv, ok := t.consts[name]; ok {
 		// Expand the constant column and cache the result.
-		expanded := generic.Repeat(cv, t.len)
+		expanded := slice.Repeat(cv, t.len)
 		t.cols[name] = expanded
 		return expanded
 	}
@@ -434,7 +434,7 @@ func (b *GroupingBuilder) Add(gid GroupID, t *Table) *GroupingBuilder {
 			t1 = reflect.TypeOf(cv)
 		}
 		if t0 != t1 {
-			panic(&generic.TypeError{t0, t1, fmt.Sprintf("for column %q are not the same", col)})
+			panic(&slice.TypeError{t0, t1, fmt.Sprintf("for column %q are not the same", col)})
 		}
 	}
 

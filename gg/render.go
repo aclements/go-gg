@@ -11,7 +11,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/aclements/go-gg/generic"
+	"github.com/aclements/go-gg/generic/slice"
 	"github.com/aclements/go-gg/table"
 	"github.com/ajstarks/svgo"
 )
@@ -157,12 +157,12 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 	if l, ok := p.axisLabels["x"]; ok {
 		xlabel = l
 	} else {
-		xlabel = strings.Join(generic.Nub(p.autoAxisLabels["x"]).([]string), "\n")
+		xlabel = strings.Join(slice.Nub(p.autoAxisLabels["x"]).([]string), "\n")
 	}
 	if l, ok := p.axisLabels["y"]; ok {
 		ylabel = l
 	} else {
-		ylabel = strings.Join(generic.Nub(p.autoAxisLabels["y"]).([]string), "\n")
+		ylabel = strings.Join(slice.Nub(p.autoAxisLabels["y"]).([]string), "\n")
 	}
 	plotElts = addAxisLabels(plotElts, xlabel, ylabel)
 

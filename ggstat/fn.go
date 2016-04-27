@@ -7,7 +7,7 @@ package ggstat
 import (
 	"math"
 
-	"github.com/aclements/go-gg/generic"
+	"github.com/aclements/go-gg/generic/slice"
 	"github.com/aclements/go-gg/table"
 	"github.com/aclements/go-moremath/stats"
 )
@@ -35,7 +35,7 @@ func getCol(g table.Grouping, x string, widen float64, splitGroups bool) map[tab
 		for _, gid := range g.Tables() {
 			var xs []float64
 			t := g.Table(gid)
-			generic.ConvertSlice(&xs, t.MustColumn(x))
+			slice.ConvertSlice(&xs, t.MustColumn(x))
 			xmin, xmax := stats.Bounds(xs)
 			if xmin < min || math.IsNaN(min) {
 				min = xmin
@@ -64,7 +64,7 @@ func getCol(g table.Grouping, x string, widen float64, splitGroups bool) map[tab
 
 		// Compute bounds.
 		var xs []float64
-		generic.ConvertSlice(&xs, t.MustColumn(x))
+		slice.ConvertSlice(&xs, t.MustColumn(x))
 		min, max := stats.Bounds(xs)
 
 		// Widen bounds.

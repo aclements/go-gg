@@ -7,7 +7,7 @@ package table
 import (
 	"sort"
 
-	"github.com/aclements/go-gg/generic"
+	"github.com/aclements/go-gg/generic/slice"
 )
 
 // SortBy sorts each group of g by the named columns. If a column's
@@ -29,7 +29,7 @@ func SortBy(g Grouping, cols ...string) Grouping {
 				continue
 			}
 			seq := t.MustColumn(col)
-			sorter := generic.Sorter(seq)
+			sorter := slice.Sorter(seq)
 			if sort.IsSorted(sorter) {
 				continue
 			}
@@ -59,7 +59,7 @@ func SortBy(g Grouping, cols ...string) Grouping {
 				continue
 			}
 			seq := t.Column(name)
-			seq = generic.MultiIndex(seq, perm)
+			seq = slice.MultiIndex(seq, perm)
 			nt.Add(name, seq)
 		}
 		return nt.Done()

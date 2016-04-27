@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/aclements/go-gg/generic"
+	"github.com/aclements/go-gg/generic/slice"
 )
 
 // MapTables applies f to each Table in g and returns a new Grouping
@@ -34,14 +34,14 @@ func MapCols(g Grouping, f interface{}, incols ...string) func(outcols ...string
 	return func(outcols ...string) Grouping {
 		fv := reflect.ValueOf(f)
 		if fv.Kind() != reflect.Func {
-			panic(&generic.TypeError{fv.Type(), nil, "must be a function"})
+			panic(&slice.TypeError{fv.Type(), nil, "must be a function"})
 		}
 		ft := fv.Type()
 		if ft.NumIn() != len(incols)+len(outcols) {
-			panic(&generic.TypeError{ft, nil, fmt.Sprintf("has the wrong number of arguments; expected %d", len(incols)+len(outcols))})
+			panic(&slice.TypeError{ft, nil, fmt.Sprintf("has the wrong number of arguments; expected %d", len(incols)+len(outcols))})
 		}
 		if ft.NumOut() != 0 {
-			panic(&generic.TypeError{ft, nil, "has the wrong number of results; expected 0"})
+			panic(&slice.TypeError{ft, nil, "has the wrong number of results; expected 0"})
 		}
 
 		// Create output column slices.

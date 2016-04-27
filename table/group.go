@@ -9,7 +9,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/aclements/go-gg/generic"
+	"github.com/aclements/go-gg/generic/slice"
 )
 
 // GroupID identifies a group. GroupIDs form a tree, rooted at
@@ -151,7 +151,7 @@ func GroupBy(g Grouping, cols ...string) Grouping {
 			// Shuffle each subgroup into ncol.
 			for i := range subgroups {
 				subcol := ncol.Slice(offsets[i], offsets[i+1]).Interface()
-				generic.CopyIndex(subcol, col, subgroups[i].rows)
+				slice.CopyIndex(subcol, col, subgroups[i].rows)
 				builders[i].Add(name, subcol)
 			}
 		}
@@ -230,13 +230,13 @@ func concatRows(tabs ...*Table) *Table {
 
 	// Construct each column.
 	var out Builder
-	seqs := make([]generic.Slice, len(tabs))
+	seqs := make([]slice.Slice, len(tabs))
 	for _, col := range tabs[0].Columns() {
 		seqs = seqs[:0]
 		for _, tab := range tabs {
 			seqs = append(seqs, tab.Column(col))
 		}
-		out.Add(col, generic.Concat(seqs...))
+		out.Add(col, slice.Concat(seqs...))
 	}
 
 	return out.Done()

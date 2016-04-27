@@ -9,7 +9,7 @@ import (
 	"math"
 	"reflect"
 
-	"github.com/aclements/go-gg/generic"
+	"github.com/aclements/go-gg/generic/slice"
 	"github.com/aclements/go-gg/table"
 )
 
@@ -146,12 +146,12 @@ func (f *FacetCommon) apply(p *Plot, dir string) {
 	}
 
 	// If f.Col is orderable, order and re-index values.
-	if generic.CanOrderR(valType.Kind()) {
+	if slice.CanOrderR(valType.Kind()) {
 		valSeq := reflect.MakeSlice(reflect.SliceOf(valType), 0, len(vals))
 		for val := range vals {
 			valSeq = reflect.Append(valSeq, reflect.ValueOf(val))
 		}
-		generic.Sort(valSeq.Interface())
+		slice.Sort(valSeq.Interface())
 		for i := 0; i < valSeq.Len(); i++ {
 			vals[valSeq.Index(i).Interface()].index = i
 		}
