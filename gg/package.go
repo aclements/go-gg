@@ -80,7 +80,30 @@
 //
 // Facets
 //
-// TODO
+// TODO.
+//
+// Aesthetics
+//
+// gg understands the following aesthetics.
+//
+// "x" and "y" give the offset from the lower-left corner of a plot.
+// Their ranges are always set to the pixel coordinates of the X and Y
+// axes, respectively, and cannot be overridden.
+//
+// "stroke" and "fill" give the stroke and fill colors of paths and
+// points. Their ranger must have type color.Color. The default ranger
+// returns a single-hue gradient for continuous data, or a categorical
+// palette for discrete data.
+//
+// "opacity" gives the overall opacity of a mark. Its ranger must have
+// type float64 and give values between 0 and 1, inclusive. The
+// default ranger ranges from 10% opaque (0.1) to fully opaque (1.0).
+//
+// "size" gives the size of marks. Its ranger must have type float64
+// and yields values that are relative to the smallest dimension of
+// the plot area (e.g., a value of 0.5 creates a point that cover half
+// of the plot width or height, whichever is smaller). The default
+// ranger ranges from 1% (0.01) to 10% (0.1).
 //
 // Related work
 //
