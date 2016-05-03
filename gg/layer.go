@@ -264,3 +264,50 @@ func (l LayerTags) Apply(p *Plot) {
 		labels,
 	}, p.Data().Tables()})
 }
+
+// LayerTooltips attaches hover tooltips to data points.
+type LayerTooltips struct {
+	// X and Y name columns that define locations of tooltips. If
+	// they are "", they default to the first and second columns,
+	// respectively.
+	X, Y string
+
+	// Label names the column that gives the text of the tooltip.
+	Label string
+
+	// TODO: Text styling, closest X or closest point, multiple
+	// tooltips if there are multiple points at the same X with
+	// different Ys?
+}
+
+func (l LayerTooltips) Apply(p *Plot) {
+	defer p.Save().Restore()
+
+	defaultCols(p, &l.X, &l.Y)
+
+	// Split up by subplot and flatten each subplot.
+	tables := map[*subplot][]*table.Table{}
+	for _, gid := range p.Data().Tables() {
+		s := subplotOf(gid)
+		tables[s] = append(tables[s], p.Data().Table(gid))
+	}
+	var ng table.GroupingBuilder
+	for k, ts := range tables {
+		var subg table.GroupingBuilder
+		for i, t := range ts {
+			subg.Add(table.RootGroupID.Extend(i), t)
+		}
+		ng.Add(table.RootGroupID.Extend(k), table.Flatten(subg.Done()))
+	}
+	p.SetData(ng.Done())
+
+	labels := make(map[table.GroupID]table.Slice)
+	for _, gid := range p.Data().Tables() {
+		labels[gid] = p.Data().Table(gid).MustColumn(l.Label)
+	}
+	p.marks = append(p.marks, plotMark{&markTooltips{
+		p.use("x", l.X),
+		p.use("y", l.Y),
+		labels,
+	}, p.Data().Tables()})
+}

@@ -7,6 +7,7 @@ package gg
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"image"
 	"image/color"
@@ -311,6 +312,93 @@ func (m *markTags) mark(env *renderEnv, canvas *svg.SVG) {
 	//canvas.Rect(int(xs[midi]+offsetX-t.width), int(ys[midi]+offsetY-0.75*t.leading), int(t.width), int(1.5*t.leading), `rx="4"`, `fill="white"`, `stroke="black"`)
 	canvas.Text(int(xs[midi]+offsetX-padX), int(ys[midi]+offsetY), label, `dy=".3em"`, `text-anchor="end"`)
 	canvas.Path(fmt.Sprintf("M%.6g %.6gc%.6g %.6g,%.6g %.6g,%.6g %.6g", xs[midi], ys[midi], 0.8*offsetX, 0.0, 0.2*offsetX, offsetY, offsetX, offsetY), `fill="none"`, `stroke="black"`, `stroke-dasharray="2, 3"`, `stroke-width="2"`)
+}
+
+type markTooltips struct {
+	x, y   *scaledData
+	labels map[table.GroupID]table.Slice
+}
+
+func (m *markTooltips) mark(env *renderEnv, canvas *svg.SVG) {
+	// Construct JSON for data.
+	xs, ys := env.get(m.x).([]float64), env.get(m.y).([]float64)
+	if len(xs) == 0 {
+		return
+	}
+	var labels []string
+	switch l2 := m.labels[env.gid].(type) {
+	case []string:
+		labels = l2
+	default:
+		l2v := reflect.ValueOf(l2)
+		labels = make([]string, l2v.Len())
+		for i := range labels {
+			labels[i] = fmt.Sprint(l2v.Index(i).Interface())
+		}
+	}
+
+	// TODO: Make env able to generate IDs.
+	//
+	// TODO: Sort by x and use binary search in Javascript.
+	//
+	// TODO: Remove points that round to the same coordinate.
+	//
+	// TODO: Put on the left if we're close to the right edge.
+	id := fmt.Sprintf("tooltips%p", env)
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "var %s = ", id)
+	data := struct {
+		X []int    `json:"x"`
+		Y []int    `json:"y"`
+		L []string `json:"l"`
+	}{make([]int, len(xs)), make([]int, len(ys)), labels}
+	for i := range xs {
+		// Round data to an int to save space.
+		data.X[i] = int(xs[i] + 0.5)
+		data.Y[i] = int(ys[i] + 0.5)
+	}
+	json.NewEncoder(&buf).Encode(data)
+	canvas.Script("text/javascript", buf.String())
+
+	canvas.Path("", `display="none"`, `fill="white"`, `stroke="black"`, fmt.Sprintf(`id="%s-p"`, id))
+	canvas.Text(0, 0, "", `display="none"`, fmt.Sprintf(`id="%s-t"`, id))
+
+	canvas.Rect(int(env.area[0]), int(env.area[1]), int(env.area[2]), int(env.area[3]), `fill-opacity="0"`, fmt.Sprintf(`onmousemove="tooltipMove(evt,%s,&quot;%s&quot;)"`, id, id), fmt.Sprintf(`onmouseout="tooltipOut(evt,%s,&quot;%s&quot;)"`, id, id))
+
+	// TODO: Only write this once per SVG.
+	canvas.Script("text/javascript", `
+function tooltipMove(evt, data, tid) {
+	var cd = Math.abs(evt.clientX-data.x[0]), ci = 0;
+	for (var i = 1; i < data.x.length; i++) {
+		var d = Math.abs(evt.clientX-data.x[i]);
+		if (d < cd) { cd = d; ci = i; }
+	}
+	var text = document.getElementById(tid+"-t");
+	text.textContent = data.l[ci];
+	text.style.display = "block";
+	text.setAttribute("x", 0);
+	text.setAttribute("y", 0);
+	var bb = text.getBBox();
+	var hm = 2, r = 3;
+	text.setAttribute("x", data.x[ci] + bb.height/4 + hm);
+	text.setAttribute("y", data.y[ci] - (bb.y + bb.height/2));
+	var p = document.getElementById(tid+"-p");
+	p.setAttribute("d", "M"+data.x[ci]+","+data.y[ci]+
+		"l"+(bb.height/4)+","+(-bb.height/2)+
+		"h"+(bb.width+2*hm)+
+		"a"+r+","+r+",90,0,1,"+r+","+r+
+		"v"+(bb.height-2*r)+
+		"a"+r+","+r+",90,0,1,"+(-r)+","+r+
+		"h"+(-bb.width-2*hm)+"z");
+	p.style.display = "block";
+}
+function tooltipOut(evt, data, tid) {
+	var text = document.getElementById(tid+"-t");
+	text.style.display = "none";
+	var p = document.getElementById(tid+"-p");
+	p.style.display = "none";
+}
+`)
 }
 
 // cssPaint returns a CSS fragment for setting CSS property prop to
