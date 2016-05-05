@@ -30,6 +30,11 @@ func MapTables(g Grouping, f func(gid GroupID, table *Table) *Table) Grouping {
 // values in the input column slices and fill output columns slices
 // out[j] accordingly. MapCols returns a new Grouping that adds each
 // outcols[j] bound to out[j].
+//
+// If all of the input columns are constant for a given table, MapCols
+// will call f with all slices of length 1. The input column slices
+// will contain the constant column values and MapCols will bind each
+// output column value out[i][0] as a constant.
 func MapCols(g Grouping, f interface{}, incols ...string) func(outcols ...string) Grouping {
 	return func(outcols ...string) Grouping {
 		fv := reflect.ValueOf(f)
@@ -47,7 +52,14 @@ func MapCols(g Grouping, f interface{}, incols ...string) func(outcols ...string
 		// Create output column slices.
 		totalRows := 0
 		for _, gid := range g.Tables() {
-			totalRows += g.Table(gid).Len()
+			t := g.Table(gid)
+		colloop:
+			for _, incol := range incols {
+				if _, ok := t.Const(incol); !ok {
+					totalRows += g.Table(gid).Len()
+					break colloop
+				}
+			}
 		}
 		ocols := make([]reflect.Value, len(outcols))
 		for i := range ocols {
@@ -60,6 +72,34 @@ func MapCols(g Grouping, f interface{}, incols ...string) func(outcols ...string
 		opos := 0
 		for _, gid := range g.Tables() {
 			t := g.Table(gid)
+
+			// Are all inputs are constants?
+			allConst := true
+			for _, incol := range incols {
+				if _, ok := t.Const(incol); !ok {
+					allConst = false
+					break
+				}
+			}
+			if allConst {
+				for i, incol := range incols {
+					cv, _ := t.Const(incol)
+					args[i] = reflect.MakeSlice(ColType(t, incol), 1, 1)
+					args[i].Index(0).Set(reflect.ValueOf(cv))
+				}
+				for i, ocol := range ocols {
+					args[i+len(incols)] = reflect.MakeSlice(ocol.Type(), 1, 1)
+				}
+
+				fv.Call(args)
+
+				tb := NewBuilder(t)
+				for i, outcol := range outcols {
+					tb.AddConst(outcol, args[i+len(incols)].Index(0).Interface())
+				}
+				out.Add(gid, tb.Done())
+				continue
+			}
 
 			// Prepare arguments.
 			for i, incol := range incols {
