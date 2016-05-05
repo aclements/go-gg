@@ -14,8 +14,8 @@ import (
 
 // TODO: Have a format struct with options for things like column
 // separator, and header separator. Provide some defaults ones for,
-// e.g., Markdown and such. Make top-level Print and Fprint call
-// methods in some default format.
+// e.g., Markdown, CSV, TSV, and such. Make top-level Print and Fprint
+// call methods in some default format.
 
 // Print(...) is shorthand for Fprint(os.Stderr, ...).
 func Print(g Grouping, formats ...string) error {
