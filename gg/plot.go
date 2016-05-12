@@ -227,7 +227,9 @@ func (p *Plot) use(aes string, col string) *scaledData {
 			p.scaleSet[scaleKey{gid, aes, scaler}] = true
 
 			// Train the scale.
-			scaler.ExpandDomain(seq)
+			if _, ok := seq.([]Unscaled); !ok {
+				scaler.ExpandDomain(seq)
+			}
 
 			// Add it to the scaledData.
 			sd.seqs[gid] = scaledSeq{seq, scaler}

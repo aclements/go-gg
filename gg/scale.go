@@ -98,6 +98,8 @@ type Scaler interface {
 	// the scale training. That would also make it easy to
 	// implement the cardinal -> discrete by value order rule.
 	// This would probably also make Map much faster.
+	//
+	// XXX If x is Unscaled, Map must only apply the ranger.
 	Map(x interface{}) interface{}
 
 	// XXX What should this return? moremath returns values in the
@@ -129,6 +131,17 @@ type ContinuousScaler interface {
 
 	Include(v float64) ContinuousScaler
 }
+
+// Unscaled represents a value that should not be scaled, but instead
+// mapped directly to the output range. For continuous scales, this
+// should be a value between 0 and 1. For discrete scales, this should
+// be an integral value.
+//
+// TODO: This is confusing for opacity and size because it *doesn't*
+// specify an exact opacity or size ratio since their default rangers
+// aren't [0,1]. Maybe Unscaled should bypass scaling altogether (and
+// only work if the range type is float64).
+type Unscaled float64
 
 var float64Type = reflect.TypeOf(float64(0))
 var colorType = reflect.TypeOf((*color.Color)(nil)).Elem()
@@ -287,6 +300,10 @@ func defaultRanger(aes string) Ranger {
 	panic(fmt.Sprintf("unknown aesthetic %q", aes))
 }
 
+// TODO: I'd like to remove identity scales and expose only Unscaled,
+// but I use identity scales for physical types like color.Color right
+// now. Probably that should bypass Scaler altogether.
+
 func NewIdentityScale() Scaler {
 	return &identityScale{}
 }
@@ -419,9 +436,17 @@ func (s *linearScale) RangeType() reflect.Type {
 
 func (s *linearScale) Map(x interface{}) interface{} {
 	ls := s.get()
-	f64 := reflect.TypeOf(float64(0))
-	v := reflect.ValueOf(x).Convert(f64).Float()
-	scaled := ls.Map(v)
+	var scaled float64
+	switch x := x.(type) {
+	case float64:
+		scaled = ls.Map(x)
+	case Unscaled:
+		scaled = float64(x)
+	default:
+		v := reflect.ValueOf(x).Convert(float64Type).Float()
+		scaled = ls.Map(v)
+	}
+
 	switch r := s.r.(type) {
 	case ContinuousRanger:
 		return r.Map(scaled)
@@ -552,8 +577,15 @@ func (s *ordinalScale) makeIndex() {
 }
 
 func (s *ordinalScale) Map(x interface{}) interface{} {
-	s.makeIndex()
-	i := s.index[x]
+	var i int
+	switch x := x.(type) {
+	case Unscaled:
+		i = int(x)
+	default:
+		s.makeIndex()
+		i = s.index[x]
+	}
+
 	switch r := s.r.(type) {
 	case DiscreteRanger:
 		minLevels, maxLevels := r.Levels()
