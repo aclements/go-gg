@@ -75,6 +75,12 @@ func (s LOESS) F(g table.Grouping) table.Grouping {
 
 	var xs, ys []float64
 	return table.MapTables(g, func(gid table.GroupID, t *table.Table) *table.Table {
+		if t.Len() == 0 {
+			nt := new(table.Builder).Add(s.X, []float64{}).Add(s.Y, []float64{})
+			preserveConsts(nt, t)
+			return nt.Done()
+		}
+
 		// TODO: We potentially convert each X column twice,
 		// since evalPoints also has to convert them.
 		slice.ConvertSlice(&xs, t.MustColumn(s.X))

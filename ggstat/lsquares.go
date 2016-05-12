@@ -11,6 +11,9 @@ import (
 	"github.com/aclements/go-moremath/vec"
 )
 
+// TODO: Should this keep the type of X and Y the same if they aren't
+// just []float64?
+
 // LeastSquares constructs a least squares polynomial regression for
 // the data (X, Y).
 //
@@ -64,6 +67,12 @@ func (s LeastSquares) F(g table.Grouping) table.Grouping {
 
 	var xs, ys []float64
 	return table.MapTables(g, func(gid table.GroupID, t *table.Table) *table.Table {
+		if t.Len() == 0 {
+			nt := new(table.Builder).Add(s.X, []float64{}).Add(s.Y, []float64{})
+			preserveConsts(nt, t)
+			return nt.Done()
+		}
+
 		// TODO: We potentially convert each X column twice,
 		// since evalPoints also has to convert them.
 		slice.ConvertSlice(&xs, t.MustColumn(s.X))

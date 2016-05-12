@@ -73,6 +73,10 @@ func (s Normalize) F(g table.Grouping) table.Grouping {
 	}
 
 	return table.MapTables(g, func(_ table.GroupID, t *table.Table) *table.Table {
+		if t.Len() == 0 {
+			return t
+		}
+
 		// Find the denominator row.
 		var drow int
 		if s.X == "" {
