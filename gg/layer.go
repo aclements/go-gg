@@ -233,8 +233,8 @@ func (l LayerTiles) Apply(p *Plot) {
 
 // LayerTags attaches text annotations to data points.
 //
-// TODO: Currently this makes one annotation per group. This should be
-// an option.
+// TODO: Currently this groups by label and makes one annotation per
+// group. This should be a controllable.
 type LayerTags struct {
 	// X and Y name columns that define the input and response
 	// each tag is attached to. If they are "", they default to
@@ -251,6 +251,8 @@ func (l LayerTags) Apply(p *Plot) {
 	// always on top and can perhaps extend outside the plot area?
 
 	defaultCols(p, &l.X, &l.Y)
+	defer p.Save().Restore()
+	p.GroupBy(l.Label)
 	// TODO: I keep wanting an abstraction for a column across
 	// groups like this.
 	labels := make(map[table.GroupID]table.Slice)
