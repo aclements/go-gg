@@ -33,9 +33,10 @@ func Agg(xs ...string) func(aggs ...Aggregator) Aggregate {
 // Aggregate first groups the table by the Xs columns. Each of these
 // groups produces a single row in the output table, where the unique
 // value of each of the Xs columns appears in the output row, along
-// with constant columns from the input. Additional columns in the
-// output row are produced by applying the Aggregator functions to the
-// group.
+// with constant columns from the input, as well as any columns that
+// have a unique value within every group (they're "effectively"
+// constant). Additional columns in the output row are produced by
+// applying the Aggregator functions to the group.
 type Aggregate struct {
 	// Xs is the list column names to group values by before
 	// computing aggregate functions.
@@ -52,6 +53,28 @@ type Aggregate struct {
 type Aggregator func(input table.Grouping, output *table.Builder)
 
 func (s Aggregate) F(g table.Grouping) table.Grouping {
+	isConst := make([]bool, len(g.Columns()))
+	for i := range isConst {
+		isConst[i] = true
+	}
+
+	subgroups := map[table.GroupID]table.Grouping{}
+	for _, gid := range g.Tables() {
+		g := table.GroupBy(g.Table(gid), s.Xs...)
+		subgroups[gid] = g
+
+		for i, col := range g.Columns() {
+			if !isConst[i] {
+				continue
+			}
+			// Can this column be promoted to constant?
+			for _, gid2 := range g.Tables() {
+				t := g.Table(gid2)
+				isConst[i] = isConst[i] && checkConst(t, col)
+			}
+		}
+	}
+
 	return table.MapTables(g, func(_ table.GroupID, t *table.Table) *table.Table {
 		g := table.GroupBy(t, s.Xs...)
 		var nt table.Builder
@@ -59,7 +82,7 @@ func (s Aggregate) F(g table.Grouping) table.Grouping {
 		// Construct X columns.
 		rows := len(g.Tables())
 		for colidx, xcol := range s.Xs {
-			xs := reflect.MakeSlice(reflect.TypeOf(t.MustColumn(xcol)), rows, rows)
+			xs := reflect.MakeSlice(table.ColType(t, xcol), rows, rows)
 			for i, gid := range g.Tables() {
 				for j := 0; j < len(s.Xs)-colidx-1; j++ {
 					gid = gid.Parent()
@@ -75,10 +98,43 @@ func (s Aggregate) F(g table.Grouping) table.Grouping {
 			agg(g, &nt)
 		}
 
-		// Keep constant columns.
-		preserveConsts(&nt, t)
+		// Keep constant and effectively constant columns.
+		for i := range isConst {
+			col := t.Columns()[i]
+			if !isConst[i] || nt.Has(col) {
+				continue
+			}
+			if cv, ok := t.Const(col); ok {
+				nt.AddConst(col, cv)
+				continue
+			}
+
+			ncol := reflect.MakeSlice(table.ColType(t, col), len(g.Tables()), len(g.Tables()))
+			for i, gid := range g.Tables() {
+				v := reflect.ValueOf(g.Table(gid).Column(col))
+				ncol.Index(i).Set(v.Index(0))
+			}
+			nt.Add(col, ncol.Interface())
+		}
 		return nt.Done()
 	})
+}
+
+func checkConst(t *table.Table, col string) bool {
+	if _, ok := t.Const(col); ok {
+		return true
+	}
+	v := reflect.ValueOf(t.Column(col))
+	if v.Len() <= 1 {
+		return true
+	}
+	elem := v.Index(0).Interface()
+	for i, l := 1, v.Len(); i < l; i++ {
+		if elem != v.Index(i).Interface() {
+			return false
+		}
+	}
+	return true
 }
 
 // AggCount returns an aggregate function that computes the number of
@@ -174,9 +230,14 @@ func aggFn(f func([]float64) float64, prefix string, cols ...string) Aggregator 
 	}
 }
 
-// AggUnique returns an aggregate function that computes the unique
-// value of each of cols. If a given group contains more than one
-// value, it panics.
+// AggUnique returns an aggregate function retains the unique value of
+// each of cols within each aggregate group, or panics if some group
+// contains more than one value for one of these columns.
+//
+// Note that Aggregate will automatically retain columns that happen
+// to be unique. AggUnique can be used to enforce at aggregation time
+// that certain columns *must* be unique (and get a nice error if they
+// are not).
 func AggUnique(cols ...string) Aggregator {
 	return func(input table.Grouping, b *table.Builder) {
 		if len(cols) == 0 {
