@@ -1,3 +1,7 @@
+// Copyright (c) 2002 Cynthia Brewer, Mark Harrower, and The
+// Pennsylvania State University.
+// Please see license at http://colorbrewer.org/export/LICENSE.txt.
+
 // Package brewer provides color specifications and designs developed
 // by Cynthia Brewer (http://colorbrewer.org/).
 //
