@@ -12,6 +12,7 @@ import (
 
 	"github.com/aclements/go-gg/generic"
 	"github.com/aclements/go-gg/generic/slice"
+	"github.com/aclements/go-gg/palette"
 	"github.com/aclements/go-gg/table"
 	"github.com/aclements/go-moremath/scale"
 )
@@ -734,19 +735,7 @@ func (r *defaultColorRanger) RangeType() reflect.Type {
 }
 
 func (r *defaultColorRanger) Map(x float64) interface{} {
-	// We use green because the human visual system is most
-	// sensitive to green and can thus distinguish shades most
-	// readily. Green also connotes "good", where red connotes
-	// "bad". Blue would be a neutral color, but is much less
-	// visible.
-	//
-	// We're intentionally taking advantage of the sRGB curve:
-	// people are better at distinguishing dark shades, so even
-	// though these points are not at all evenly spaced in terms
-	// of absolute luminance, they are reasonably spaced in terms
-	// of perceptual difference.
-	x = math.Max(0, math.Min(1, x)) // Clamp.
-	return color.RGBA{uint8(138 * x), uint8(226 * x), uint8(52 * x), 0xff}
+	return palette.Viridis.Map(x)
 }
 
 func (r *defaultColorRanger) Unmap(y interface{}) (float64, bool) {
