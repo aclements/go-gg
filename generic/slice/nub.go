@@ -22,7 +22,7 @@ func Nub(v T) T {
 		set.SetMapIndex(x, trueVal)
 		indexes = append(indexes, i)
 	}
-	return MultiIndex(v, indexes)
+	return Select(v, indexes)
 }
 
 // NubAppend is equivalent to appending all of the slices in vs and

@@ -10,8 +10,8 @@ import (
 	"github.com/aclements/go-gg/generic"
 )
 
-// MultiIndex returns a slice w such that w[i] = v[indexes[i]].
-func MultiIndex(v T, indexes []int) T {
+// Select returns a slice w such that w[i] = v[indexes[i]].
+func Select(v T, indexes []int) T {
 	switch v := v.(type) {
 	case []int:
 		res := make([]int, len(indexes))

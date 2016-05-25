@@ -54,7 +54,7 @@ func Join(g1 Grouping, col1 string, g2 Grouping, col2 string) Grouping {
 				nt.Add(col, cv)
 				continue
 			}
-			nt.Add(col, slice.MultiIndex(t1.Column(col), idx1))
+			nt.Add(col, slice.Select(t1.Column(col), idx1))
 		}
 		for _, col := range t2.Columns() {
 			// Often the join column is the same in both
@@ -68,7 +68,7 @@ func Join(g1 Grouping, col1 string, g2 Grouping, col2 string) Grouping {
 				nt.Add(col, cv)
 				continue
 			}
-			nt.Add(col, slice.MultiIndex(t2.Column(col), idx2))
+			nt.Add(col, slice.Select(t2.Column(col), idx2))
 		}
 
 		ng.Add(gid, nt.Done())

@@ -59,7 +59,7 @@ func SortBy(g Grouping, cols ...string) Grouping {
 				continue
 			}
 			seq := t.Column(name)
-			seq = slice.MultiIndex(seq, perm)
+			seq = slice.Select(seq, perm)
 			nt.Add(name, seq)
 		}
 		return nt.Done()
