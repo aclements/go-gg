@@ -151,7 +151,7 @@ func GroupBy(g Grouping, cols ...string) Grouping {
 			// Shuffle each subgroup into ncol.
 			for i := range subgroups {
 				subcol := ncol.Slice(offsets[i], offsets[i+1]).Interface()
-				slice.CopyIndex(subcol, col, subgroups[i].rows)
+				slice.SelectInto(subcol, col, subgroups[i].rows)
 				builders[i].Add(name, subcol)
 			}
 		}

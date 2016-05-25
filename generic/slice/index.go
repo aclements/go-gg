@@ -43,10 +43,10 @@ func Select(v T, indexes []int) T {
 	return res.Interface()
 }
 
-// CopyIndex assigns out[i] = in[indexes[i]]. in and out must have the
-// same types and len(out) must be >= len(indexes). If in and out
+// SelectInto assigns out[i] = in[indexes[i]]. in and out must have
+// the same types and len(out) must be >= len(indexes). If in and out
 // overlap, the results are undefined.
-func CopyIndex(out, in T, indexes []int) {
+func SelectInto(out, in T, indexes []int) {
 	// TODO: Maybe they should only have to be assignable?
 	if it, ot := reflect.TypeOf(in), reflect.TypeOf(out); it != ot {
 		panic(&generic.TypeError{it, ot, "must be the same type"})
