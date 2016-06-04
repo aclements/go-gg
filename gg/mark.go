@@ -394,11 +394,12 @@ func (m *markTooltips) mark(env *renderEnv, canvas *svg.SVG) {
 	canvas.Path("", `display="none"`, `fill="white"`, `stroke="black"`, fmt.Sprintf(`id="%s-p"`, id))
 	canvas.Text(0, 0, "", `display="none"`, fmt.Sprintf(`id="%s-t"`, id))
 
-	canvas.Rect(int(env.area[0]), int(env.area[1]), int(env.area[2]), int(env.area[3]), `fill-opacity="0"`, fmt.Sprintf(`onmousemove="tooltipMove(evt,%s,&quot;%s&quot;)"`, id, id), fmt.Sprintf(`onmouseout="tooltipOut(evt,%s,&quot;%s&quot;)"`, id, id))
+	px, _, pw, _ := env.Area()
+	canvas.Rect(int(env.area[0]), int(env.area[1]), int(env.area[2]), int(env.area[3]), `fill-opacity="0"`, fmt.Sprintf(`onmousemove="tooltipMove(evt,%s,&quot;%s&quot;,%v,%v)"`, id, id, px, px+pw), fmt.Sprintf(`onmouseout="tooltipOut(evt,%s,&quot;%s&quot;)"`, id, id))
 
 	// TODO: Only write this once per SVG.
 	canvas.Script("text/javascript", `
-function tooltipMove(evt, data, tid) {
+function tooltipMove(evt, data, tid, minx, maxx) {
 	var cd = Math.abs(evt.clientX-data.x[0]), ci = 0;
 	for (var i = 1; i < data.x.length; i++) {
 		var d = Math.abs(evt.clientX-data.x[i]);
@@ -411,9 +412,23 @@ function tooltipMove(evt, data, tid) {
 	text.setAttribute("y", 0);
 	var bb = text.getBBox();
 	var hm = 2, r = 3;
-	text.setAttribute("x", data.x[ci] + bb.height/4 + hm);
+	var tx = data.x[ci] + bb.height/4 + hm;
+	var flip = false;
+	if (tx + bb.width + 2*hm + r > maxx) {
+		var tx2 = data.x[ci] - bb.height/4 - hm - bb.width;
+		if (tx2 - 2*hm - r >= minx) {
+			tx = tx2;
+			flip = true;
+		}
+	}
+	text.setAttribute("x", tx);
 	text.setAttribute("y", data.y[ci] - (bb.y + bb.height/2));
 	var p = document.getElementById(tid+"-p");
+	if (flip) {
+		p.setAttribute("transform", "translate("+2*data.x[ci]+",0) scale(-1,1)")
+	} else {
+		p.setAttribute("transform", "")
+	}
 	p.setAttribute("d", "M"+data.x[ci]+","+data.y[ci]+
 		"l"+(bb.height/4)+","+(-bb.height/2)+
 		"h"+(bb.width+2*hm)+

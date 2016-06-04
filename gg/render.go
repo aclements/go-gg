@@ -421,6 +421,10 @@ func (env *renderEnv) getFirst(sd *scaledData) interface{} {
 	return v.scaler.Map(rv.Index(0).Interface())
 }
 
+func (env *renderEnv) Area() (x, y, w, h float64) {
+	return env.area[0], env.area[1], env.area[2], env.area[3]
+}
+
 func (env *renderEnv) Size() (w, h float64) {
 	return env.area[2], env.area[3]
 }
