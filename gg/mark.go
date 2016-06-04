@@ -23,8 +23,14 @@ import (
 	"github.com/ajstarks/svgo"
 )
 
+// TODO: Audit all of this for inf and NaN.
+
 type marker interface {
 	mark(env *renderEnv, canvas *svg.SVG)
+}
+
+func isFinite(x float64) bool {
+	return !(math.IsNaN(x) || math.IsInf(x, 0))
 }
 
 type plotMark struct {
@@ -121,12 +127,24 @@ func drawPath(canvas *svg.SVG, xs, ys []float64, stroke color.Color, fill color.
 	}
 
 	// Build path.
-	path := []byte("M")
+	var path []byte
+	inLine := false
 	for i := range xs {
+		if !isFinite(xs[i]) || !isFinite(ys[i]) {
+			inLine = false
+			continue
+		}
+		if !inLine {
+			path = append(path, 'M')
+			inLine = true
+		}
 		path = append(path, ' ')
 		path = strconv.AppendFloat(path, xs[i], 'g', 6, 64)
 		path = append(path, ' ')
 		path = strconv.AppendFloat(path, ys[i], 'g', 6, 64)
+	}
+	if len(path) == 0 {
+		return
 	}
 
 	// XXX Stroke width
@@ -156,6 +174,10 @@ func (m *markPoint) mark(env *renderEnv, canvas *svg.SVG) {
 	mindim := math.Min(env.Size())
 
 	for i := range xs {
+		if !isFinite(xs[i]) || !isFinite(ys[i]) {
+			continue
+		}
+
 		var style string
 		if colors != nil {
 			style = cssPaint("fill", colors[i])
@@ -198,7 +220,7 @@ func (m *markTiles) mark(env *renderEnv, canvas *svg.SVG) {
 		uset := map[float64]bool{}
 		for _, v := range vals {
 			if !uset[v] {
-				if math.IsNaN(v) || math.IsInf(v, 0) {
+				if !isFinite(v) {
 					continue
 				}
 				unique = append(unique, v)
@@ -254,6 +276,9 @@ func (m *markTiles) mark(env *renderEnv, canvas *svg.SVG) {
 	iw, ih := round((xmax-xmin+xgap)/xgap), round((ymax-ymin+ygap)/ygap)
 	img := image.NewRGBA(image.Rect(0, 0, iw, ih))
 	for i := range xs {
+		if !isFinite(xs[i]) || !isFinite(ys[i]) {
+			continue
+		}
 		img.Set(round((xs[i]-xmin)/xgap), round((ys[i]-ymin)/ygap), fills[i])
 	}
 
@@ -351,11 +376,17 @@ func (m *markTooltips) mark(env *renderEnv, canvas *svg.SVG) {
 		X []int    `json:"x"`
 		Y []int    `json:"y"`
 		L []string `json:"l"`
-	}{make([]int, len(xs)), make([]int, len(ys)), labels}
+	}{make([]int, 0, len(xs)), make([]int, 0, len(ys)), labels}
 	for i := range xs {
+		if !isFinite(xs[i]) || !isFinite(ys[i]) {
+			continue
+		}
 		// Round data to an int to save space.
-		data.X[i] = int(xs[i] + 0.5)
-		data.Y[i] = int(ys[i] + 0.5)
+		data.X = append(data.X, int(xs[i]+0.5))
+		data.Y = append(data.Y, int(ys[i]+0.5))
+	}
+	if len(data.X) == 0 {
+		return
 	}
 	json.NewEncoder(&buf).Encode(data)
 	canvas.Script("text/javascript", buf.String())
