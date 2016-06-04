@@ -10,12 +10,12 @@ import (
 	"github.com/aclements/go-gg/generic"
 )
 
-// ConvertSlice converts each element in from and assigns it to *to.
-// to must be a pointer to a slice. ConvertSlice slices or extends *to
-// to len(from) and then assigns to[i] = T(from[i]) where T is the
-// type of *to's elements. If from and *to have the same element type,
-// it simply assigns *to = from.
-func ConvertSlice(to interface{}, from T) {
+// Convert converts each element in from and assigns it to *to. to
+// must be a pointer to a slice. Convert slices or extends *to to
+// len(from) and then assigns to[i] = T(from[i]) where T is the type
+// of *to's elements. If from and *to have the same element type, it
+// simply assigns *to = from.
+func Convert(to interface{}, from T) {
 	fv := reflectSlice(from)
 	tv := reflect.ValueOf(to)
 	if tv.Kind() != reflect.Ptr {

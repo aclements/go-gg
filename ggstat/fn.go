@@ -35,7 +35,7 @@ func getCol(g table.Grouping, x string, widen float64, splitGroups bool) map[tab
 		for _, gid := range g.Tables() {
 			var xs []float64
 			t := g.Table(gid)
-			slice.ConvertSlice(&xs, t.MustColumn(x))
+			slice.Convert(&xs, t.MustColumn(x))
 			xmin, xmax := stats.Bounds(xs)
 			if xmin < min || math.IsNaN(min) {
 				min = xmin
@@ -64,7 +64,7 @@ func getCol(g table.Grouping, x string, widen float64, splitGroups bool) map[tab
 
 		// Compute bounds.
 		var xs []float64
-		slice.ConvertSlice(&xs, t.MustColumn(x))
+		slice.Convert(&xs, t.MustColumn(x))
 		min, max := stats.Bounds(xs)
 
 		// Widen bounds.

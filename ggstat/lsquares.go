@@ -75,8 +75,8 @@ func (s LeastSquares) F(g table.Grouping) table.Grouping {
 
 		// TODO: We potentially convert each X column twice,
 		// since evalPoints also has to convert them.
-		slice.ConvertSlice(&xs, t.MustColumn(s.X))
-		slice.ConvertSlice(&ys, t.MustColumn(s.Y))
+		slice.Convert(&xs, t.MustColumn(s.X))
+		slice.Convert(&ys, t.MustColumn(s.Y))
 		eval := evals[gid]
 
 		r := fit.PolynomialRegression(xs, ys, nil, s.Degree)

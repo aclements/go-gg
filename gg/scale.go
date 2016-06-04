@@ -366,7 +366,7 @@ func (s *linearScale) ExpandDomain(v table.Slice) {
 	}
 
 	var data []float64
-	slice.ConvertSlice(&data, v)
+	slice.Convert(&data, v)
 	min, max := s.dataMin, s.dataMax
 	for _, v := range data {
 		if math.IsNaN(v) || math.IsInf(v, 0) {

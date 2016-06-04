@@ -214,7 +214,7 @@ func aggFn(f func([]float64) float64, prefix string, cols ...string) Aggregator 
 				if i == 0 {
 					ct = reflect.TypeOf(v)
 				}
-				slice.ConvertSlice(&xs, v)
+				slice.Convert(&xs, v)
 				means = append(means, f(xs))
 			}
 
@@ -223,7 +223,7 @@ func aggFn(f func([]float64) float64, prefix string, cols ...string) Aggregator 
 			} else {
 				// Convert means back to the type of col.
 				outptr := reflect.New(ct)
-				slice.ConvertSlice(outptr.Interface(), means)
+				slice.Convert(outptr.Interface(), means)
 				b.Add(ocols[coli], outptr.Elem().Interface())
 			}
 		}

@@ -83,8 +83,8 @@ func (s LOESS) F(g table.Grouping) table.Grouping {
 
 		// TODO: We potentially convert each X column twice,
 		// since evalPoints also has to convert them.
-		slice.ConvertSlice(&xs, t.MustColumn(s.X))
-		slice.ConvertSlice(&ys, t.MustColumn(s.Y))
+		slice.Convert(&xs, t.MustColumn(s.X))
+		slice.Convert(&ys, t.MustColumn(s.Y))
 		eval := evals[gid]
 
 		loess := fit.LOESS(xs, ys, s.Degree, s.Span)
@@ -116,7 +116,7 @@ func evalPoints(g table.Grouping, x string, n int, widen float64, splitGroups bo
 		min, max := math.NaN(), math.NaN()
 		for _, gid := range g.Tables() {
 			t := g.Table(gid)
-			slice.ConvertSlice(&xs, t.MustColumn(x))
+			slice.Convert(&xs, t.MustColumn(x))
 			xmin, xmax := stats.Bounds(xs)
 			if xmin < min || math.IsNaN(min) {
 				min = xmin
@@ -145,7 +145,7 @@ func evalPoints(g table.Grouping, x string, n int, widen float64, splitGroups bo
 		t := g.Table(gid)
 
 		// Compute bounds.
-		slice.ConvertSlice(&xs, t.MustColumn(x))
+		slice.Convert(&xs, t.MustColumn(x))
 		min, max := stats.Bounds(xs)
 
 		// Widen bounds.
