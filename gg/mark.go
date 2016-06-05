@@ -400,11 +400,21 @@ func (m *markTooltips) mark(env *renderEnv, canvas *svg.SVG) {
 	// TODO: Only write this once per SVG.
 	canvas.Script("text/javascript", `
 function tooltipMove(evt, data, tid, minx, maxx) {
-	var cd = Math.abs(evt.clientX-data.x[0]), ci = 0;
+	// Convert evt.x to an SVG coordinate.
+	var svg = document.rootElement;
+	var pt = svg.createSVGPoint();
+	pt.x = evt.clientX;
+	pt.y = evt.clientY;
+	var ex = pt.matrixTransform(svg.getScreenCTM().inverse()).x;
+
+	// Find data point closest to event coordinate.
+	var cd = Math.abs(ex-data.x[0]), ci = 0;
 	for (var i = 1; i < data.x.length; i++) {
-		var d = Math.abs(evt.clientX-data.x[i]);
+		var d = Math.abs(ex-data.x[i]);
 		if (d < cd) { cd = d; ci = i; }
 	}
+
+	// Update text content and position.
 	var text = document.getElementById(tid+"-t");
 	text.textContent = data.l[ci];
 	text.style.display = "block";
@@ -417,12 +427,15 @@ function tooltipMove(evt, data, tid, minx, maxx) {
 	if (tx + bb.width + 2*hm + r > maxx) {
 		var tx2 = data.x[ci] - bb.height/4 - hm - bb.width;
 		if (tx2 - 2*hm - r >= minx) {
+			// Position left of point.
 			tx = tx2;
 			flip = true;
 		}
 	}
 	text.setAttribute("x", tx);
 	text.setAttribute("y", data.y[ci] - (bb.y + bb.height/2));
+
+	// Update marker.
 	var p = document.getElementById(tid+"-p");
 	if (flip) {
 		p.setAttribute("transform", "translate("+2*data.x[ci]+",0) scale(-1,1)")
