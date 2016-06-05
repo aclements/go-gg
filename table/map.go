@@ -123,3 +123,29 @@ func MapCols(g Grouping, f interface{}, incols ...string) func(outcols ...string
 		return out.Done()
 	}
 }
+
+// Rename returns g with column 'from' renamed to 'to'. The column
+// retains its position.
+func Rename(g Grouping, from, to string) Grouping {
+	return MapTables(g, func(_ GroupID, t *Table) *Table {
+		t.MustColumn(from)
+		var nt Builder
+		for _, col := range t.Columns() {
+			if col == to {
+				continue
+			}
+
+			ncol := col
+			if col == from {
+				ncol = to
+			}
+
+			if cv, ok := t.Const(col); ok {
+				nt.AddConst(ncol, cv)
+			} else {
+				nt.Add(ncol, t.Column(col))
+			}
+		}
+		return nt.Done()
+	})
+}
