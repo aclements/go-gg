@@ -298,7 +298,7 @@ func newEltLabelAxis(side rune, label string, x, y, span int) *eltLabel {
 		fill:      "none",
 	}
 	switch side {
-	case 'b':
+	case 'T', 'b':
 		elt.x2Path = eltPath{x + span}
 	case 'l':
 		elt.y2Path = eltPath{y + span}
@@ -315,6 +315,8 @@ func (e *eltLabel) SizeHint() (w, h float64, flexw, flexh bool) {
 	switch e.side {
 	case 't', 'b':
 		return 0, dim, true, false
+	case 'T': // Titles
+		return 0, 1.5 * dim, true, false
 	case 'l', 'r':
 		return dim, 0, false, true
 	default:
@@ -435,7 +437,7 @@ func addSubplotLabels(elts []plotElt) []plotElt {
 	return elts
 }
 
-func addAxisLabels(elts []plotElt, xlabel, ylabel string) []plotElt {
+func addAxisLabels(elts []plotElt, title, xlabel, ylabel string) []plotElt {
 	// Find the region covered by subplots.
 	var r subplotRegion
 	for _, elt := range elts {
@@ -447,6 +449,13 @@ func addAxisLabels(elts []plotElt, xlabel, ylabel string) []plotElt {
 	}
 	if !r.valid {
 		return elts
+	}
+
+	// Add title.
+	// TODO: Make this larger.
+	if title != "" {
+		elts = append(elts,
+			newEltLabelAxis('T', title, r.x1, r.y1-1, r.x2-r.x1))
 	}
 
 	// Add labels.

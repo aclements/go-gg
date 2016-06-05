@@ -152,7 +152,7 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 	// Add ticks and facet labels.
 	plotElts = addSubplotLabels(plotElts)
 
-	// Add axis labels.
+	// Add axis labels and title.
 	var xlabel, ylabel string
 	if l, ok := p.axisLabels["x"]; ok {
 		xlabel = l
@@ -164,7 +164,7 @@ func (p *Plot) WriteSVG(w io.Writer, width, height int) error {
 	} else {
 		ylabel = strings.Join(slice.Nub(p.autoAxisLabels["y"]).([]string), "\n")
 	}
-	plotElts = addAxisLabels(plotElts, xlabel, ylabel)
+	plotElts = addAxisLabels(plotElts, p.title, xlabel, ylabel)
 
 	// Compute plot element layout.
 	layout := layoutPlotElts(plotElts)

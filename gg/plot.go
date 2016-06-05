@@ -31,6 +31,8 @@ type Plot struct {
 	axisLabels     map[string]string
 	autoAxisLabels map[string][]string
 
+	title string
+
 	constNonce int
 }
 
@@ -294,6 +296,19 @@ type axisLabel struct {
 
 func (a axisLabel) Apply(p *Plot) {
 	p.axisLabels[a.axis] = a.label
+}
+
+// Title returns a Plotter that sets the title of a Plot.
+func Title(label string) Plotter {
+	return titlePlotter{label}
+}
+
+type titlePlotter struct {
+	label string
+}
+
+func (t titlePlotter) Apply(p *Plot) {
+	p.title = t.label
 }
 
 // A Stat transforms a table.Grouping.
