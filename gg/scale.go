@@ -114,6 +114,17 @@ type Scaler interface {
 	// input space or nil if ticks don't make sense.
 	Ticks(max int, pred func(major []float64, labels []string) bool) (major, minor table.Slice, labels []string)
 
+	// SetFormatter sets the formatter for values on this scale.
+	//
+	// f may be nil, which makes this Scaler use the default
+	// formatting. Otherwise, f must be a func(T) string where T
+	// is convertible from the Scaler's input type (note that this
+	// is weaker than typical Go function calls, which require
+	// that the argument be assignable; this makes it possible to
+	// use general-purpose functions like func(float64) string
+	// even for more specific input types).
+	SetFormatter(f interface{})
+
 	CloneScaler() Scaler
 }
 
@@ -175,7 +186,10 @@ func isCardinal(k reflect.Kind) bool {
 
 type defaultScale struct {
 	scale Scaler
-	r     Ranger
+
+	// Pre-instantiation state.
+	r         Ranger
+	formatter interface{}
 }
 
 func (s *defaultScale) String() string {
@@ -189,10 +203,7 @@ func (s *defaultScale) ExpandDomain(v table.Slice) {
 		if err != nil {
 			panic(&generic.TypeError{reflect.TypeOf(v), nil, err.Error()})
 		}
-		if s.r != nil {
-			s.scale.Ranger(s.r)
-			s.r = nil
-		}
+		s.instantiate()
 	}
 	s.scale.ExpandDomain(v)
 }
@@ -200,12 +211,22 @@ func (s *defaultScale) ExpandDomain(v table.Slice) {
 func (s *defaultScale) ensure() Scaler {
 	if s.scale == nil {
 		s.scale = NewLinearScaler()
-		if s.r != nil {
-			s.scale.Ranger(s.r)
-			s.r = nil
-		}
+		s.instantiate()
 	}
 	return s.scale
+}
+
+// instantiate applies the pre-instantiation state to the newly
+// instantiated s.scale and clears the state in s.
+func (s *defaultScale) instantiate() {
+	if s.r != nil {
+		s.scale.Ranger(s.r)
+		s.r = nil
+	}
+	if s.formatter != nil {
+		s.scale.SetFormatter(s.formatter)
+		s.formatter = nil
+	}
 }
 
 func (s *defaultScale) Ranger(r Ranger) Ranger {
@@ -235,11 +256,19 @@ func (s *defaultScale) Ticks(max int, pred func(major []float64, labels []string
 	return s.ensure().Ticks(max, pred)
 }
 
+func (s *defaultScale) SetFormatter(f interface{}) {
+	if s.scale == nil {
+		s.formatter = f
+		return
+	}
+	s.scale.SetFormatter(f)
+}
+
 func (s *defaultScale) CloneScaler() Scaler {
 	if s.scale == nil {
-		return &defaultScale{nil, s.r}
+		return &defaultScale{nil, s.r, s.formatter}
 	}
-	return &defaultScale{s.scale.CloneScaler(), nil}
+	return &defaultScale{s.scale.CloneScaler(), nil, s.formatter}
 }
 
 func DefaultScale(seq table.Slice) (Scaler, error) {
@@ -328,6 +357,8 @@ func (s *identityScale) Ticks(max int, pred func(major []float64, labels []strin
 	return nil, nil, nil
 }
 
+func (s *identityScale) SetFormatter(f interface{}) {}
+
 func (s *identityScale) CloneScaler() Scaler {
 	s2 := *s
 	return &s2
@@ -351,6 +382,7 @@ func NewLinearScaler() ContinuousScaler {
 type linearScale struct {
 	s scale.Linear
 	r Ranger
+	f interface{}
 
 	domainType       reflect.Type
 	dataMin, dataMax float64
@@ -487,9 +519,27 @@ func (s *linearScale) Ticks(max int, pred func(major []float64, labels []string)
 
 	mkLabels := func(major []float64) []string {
 		// Compute labels.
-		//
-		// TODO: Custom label formats.
 		labels = make([]string, len(major))
+		if s.f != nil {
+			// Use custom formatter.
+			if f, ok := s.f.(func(float64) string); ok {
+				// Fast path.
+				for i, x := range major {
+					labels[i] = f(x)
+				}
+				return labels
+			}
+			// TODO: Type check for better error.
+			fv := reflect.ValueOf(s.f)
+			at := fv.Type().In(0)
+			var avs [1]reflect.Value
+			for i, x := range major {
+				avs[0] = reflect.ValueOf(x).Convert(at)
+				rvs := fv.Call(avs[:])
+				labels[i] = rvs[0].Interface().(string)
+			}
+			return labels
+		}
 		if s.domainType != nil {
 			z := reflect.Zero(s.domainType).Interface()
 			if _, ok := z.(Stringer); ok {
@@ -519,6 +569,10 @@ func (s *linearScale) Ticks(max int, pred func(major []float64, labels []string)
 	return majorx, minorx, mkLabels(majorx)
 }
 
+func (s *linearScale) SetFormatter(f interface{}) {
+	s.f = f
+}
+
 func (s *linearScale) CloneScaler() Scaler {
 	s2 := *s
 	return &s2
@@ -537,6 +591,7 @@ func NewOrdinalScale() Scaler {
 type ordinalScale struct {
 	allData []slice.T
 	r       Ranger
+	f       interface{}
 	ordered table.Slice
 	index   map[interface{}]int
 }
@@ -621,10 +676,29 @@ func (s *ordinalScale) Ticks(max int, pred func(major []float64, labels []string
 	s.makeIndex()
 	labels = make([]string, len(s.index))
 	ov := reflect.ValueOf(s.ordered)
-	for i, len := 0, ov.Len(); i < len; i++ {
-		labels[i] = fmt.Sprintf("%v", ov.Index(i).Interface())
+
+	if s.f != nil {
+		// Use custom formatter.
+		// TODO: Type check for better error.
+		fv := reflect.ValueOf(s.f)
+		at := fv.Type().In(0)
+		var avs [1]reflect.Value
+		for i, len := 0, ov.Len(); i < len; i++ {
+			avs[0] = ov.Index(i).Convert(at)
+			rvs := fv.Call(avs[:])
+			labels[i] = rvs[0].Interface().(string)
+		}
+	} else {
+		// Use String() method or standard format.
+		for i, len := 0, ov.Len(); i < len; i++ {
+			labels[i] = fmt.Sprintf("%v", ov.Index(i).Interface())
+		}
 	}
 	return s.ordered, nil, labels
+}
+
+func (s *ordinalScale) SetFormatter(f interface{}) {
+	s.f = f
 }
 
 func (s *ordinalScale) CloneScaler() Scaler {
