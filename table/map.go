@@ -149,3 +149,22 @@ func Rename(g Grouping, from, to string) Grouping {
 		return nt.Done()
 	})
 }
+
+// Remove returns g with column 'col' removed.
+func Remove(g Grouping, col string) Grouping {
+	return MapTables(g, func(_ GroupID, t *Table) *Table {
+		t.MustColumn(col)
+		var nt Builder
+		for _, col2 := range t.Columns() {
+			if col == col2 {
+				continue
+			}
+			if cv, ok := t.Const(col2); ok {
+				nt.AddConst(col2, cv)
+			} else {
+				nt.Add(col2, t.Column(col2))
+			}
+		}
+		return nt.Done()
+	})
+}
