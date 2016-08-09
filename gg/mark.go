@@ -405,12 +405,12 @@ function tooltipMove(evt, data, tid, minx, maxx) {
 	var pt = svg.createSVGPoint();
 	pt.x = evt.clientX;
 	pt.y = evt.clientY;
-	var ex = pt.matrixTransform(svg.getScreenCTM().inverse()).x;
+	var epos = pt.matrixTransform(svg.getScreenCTM().inverse());
 
 	// Find data point closest to event coordinate.
-	var cd = Math.abs(ex-data.x[0]), ci = 0;
+	var cd = Math.sqrt(Math.pow(epos.x-data.x[0], 2) + Math.pow(epos.y-data.y[0], 2)), ci = 0;
 	for (var i = 1; i < data.x.length; i++) {
-		var d = Math.abs(ex-data.x[i]);
+		var d = Math.sqrt(Math.pow(epos.x-data.x[i], 2) + Math.pow(epos.y-data.y[i], 2));
 		if (d < cd) { cd = d; ci = i; }
 	}
 
