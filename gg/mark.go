@@ -206,7 +206,9 @@ func (m *markTiles) mark(env *renderEnv, canvas *svg.SVG) {
 	// are color.Color? How would this work with an identity
 	// scaler?
 	var fills []color.Color
-	slice.Convert(&fills, env.get(m.fill))
+	if m.fill != nil {
+		slice.Convert(&fills, env.get(m.fill))
+	}
 
 	// TODO: We can't use an <image> this if the width and height
 	// are specified, or if there is a stroke.
@@ -275,11 +277,15 @@ func (m *markTiles) mark(env *renderEnv, canvas *svg.SVG) {
 	// Create the image.
 	iw, ih := round((xmax-xmin+xgap)/xgap), round((ymax-ymin+ygap)/ygap)
 	img := image.NewRGBA(image.Rect(0, 0, iw, ih))
+	fill := color.Color(color.Black)
 	for i := range xs {
 		if !isFinite(xs[i]) || !isFinite(ys[i]) {
 			continue
 		}
-		img.Set(round((xs[i]-xmin)/xgap), round((ys[i]-ymin)/ygap), fills[i])
+		if fills != nil {
+			fill = fills[i]
+		}
+		img.Set(round((xs[i]-xmin)/xgap), round((ys[i]-ymin)/ygap), fill)
 	}
 
 	// Encode the image.
