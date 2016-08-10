@@ -9,6 +9,8 @@ import (
 	"image/color"
 	"math"
 	"reflect"
+	"strings"
+	"time"
 
 	"github.com/aclements/go-gg/generic"
 	"github.com/aclements/go-gg/generic/slice"
@@ -325,6 +327,9 @@ func DefaultScale(seq table.Slice) (Scaler, error) {
 
 	case []string:
 		// TODO: Ordinal scale
+
+	case []time.Time:
+		return NewTimeScaler(), nil
 	}
 
 	rt := reflect.TypeOf(seq).Elem()
@@ -438,13 +443,13 @@ func (s *linearScale) String() string {
 	return fmt.Sprintf("linear [%g,%g] => %s", s.s.Min, s.s.Max, s.r)
 }
 
-func (s *linearScale) ExpandDomain(v table.Slice) {
+func (s *linearScale) ExpandDomain(vs table.Slice) {
 	if s.domainType == nil {
-		s.domainType = reflect.TypeOf(v).Elem()
+		s.domainType = reflect.TypeOf(vs).Elem()
 	}
 
 	var data []float64
-	slice.Convert(&data, v)
+	slice.Convert(&data, vs)
 	min, max := s.dataMin, s.dataMax
 	for _, v := range data {
 		if math.IsNaN(v) || math.IsInf(v, 0) {
@@ -654,6 +659,299 @@ func (s *linearScale) SetFormatter(f interface{}) {
 }
 
 func (s *linearScale) CloneScaler() Scaler {
+	s2 := *s
+	return &s2
+}
+
+// NewTimeScaler returns a continuous linear scale. The domain must
+// be time.Time.
+func NewTimeScaler() *timeScale {
+	return &timeScale{}
+}
+
+type timeScale struct {
+	r                Ranger
+	f                func(time.Time) string
+	min, max         time.Time
+	dataMin, dataMax time.Time
+}
+
+func (s *timeScale) String() string {
+	return fmt.Sprintf("time [%g,%g] => %s", s.min, s.max, s.r)
+}
+
+func (s *timeScale) ExpandDomain(vs table.Slice) {
+	var data []time.Time
+	slice.Convert(&data, vs)
+	min, max := s.dataMin, s.dataMax
+	for _, v := range data {
+		if v.Before(min) || min.IsZero() {
+			min = v
+		}
+		if v.After(max) || max.IsZero() {
+			max = v
+		}
+	}
+	s.dataMin, s.dataMax = min, max
+}
+
+func (s *timeScale) SetMin(v interface{}) ContinuousScaler {
+	s.min = v.(time.Time)
+	return s
+}
+
+func (s *timeScale) SetMax(v interface{}) ContinuousScaler {
+	s.max = v.(time.Time)
+	return s
+}
+
+func (s *timeScale) Include(v interface{}) ContinuousScaler {
+	tv := v.(time.Time)
+	if s.dataMin.IsZero() {
+		s.dataMin, s.dataMax = tv, tv
+	} else {
+		if tv.Before(s.dataMin) {
+			s.dataMin = tv
+		}
+		if tv.After(s.dataMax) {
+			s.dataMax = tv
+		}
+	}
+	return s
+}
+
+func (s *timeScale) Ranger(r Ranger) Ranger {
+	old := s.r
+	if r != nil {
+		s.r = r
+	}
+	return old
+}
+
+func (s *timeScale) RangeType() reflect.Type {
+	return s.r.RangeType()
+}
+
+func (s *timeScale) getMinMax() (time.Time, time.Time) {
+	min := s.min
+	if min.IsZero() {
+		min = s.dataMin
+	}
+	max := s.max
+	if max.IsZero() {
+		max = s.dataMax
+	}
+	return min, max
+}
+
+func (s *timeScale) Map(x interface{}) interface{} {
+	min, max := s.getMinMax()
+	t := x.(time.Time)
+	var scaled float64 = float64(t.Sub(min)) / float64(max.Sub(min))
+
+	switch r := s.r.(type) {
+	case ContinuousRanger:
+		return r.Map(scaled)
+
+	case DiscreteRanger:
+		_, levels := r.Levels()
+		// Bin the scaled value into 'levels' bins.
+		level := int(scaled * float64(levels))
+		if level < 0 {
+			level = 0
+		} else if level >= levels {
+			level = levels - 1
+		}
+		return r.MapLevel(level, levels)
+
+	default:
+		panic("Ranger must be a ContinuousRanger or DiscreteRanger")
+	}
+}
+
+type durationTicks time.Duration
+
+func (d durationTicks) Next(t time.Time) time.Time {
+	return t.Add(time.Duration(d)).Truncate(time.Duration(d))
+}
+
+var timeTickerLevels = []struct {
+	min  time.Duration
+	next func(t time.Time) time.Time
+}{
+	{time.Minute, durationTicks(time.Minute).Next},
+	{10 * time.Minute, durationTicks(10 * time.Minute).Next},
+	{time.Hour, func(t time.Time) time.Time {
+		year, month, day := t.Date()
+		// N.B. This will skip an hour at some DST transitions.
+		return time.Date(year, month, day, t.Hour()+1, 0, 0, 0, t.Location())
+	}},
+	{6 * time.Hour, func(t time.Time) time.Time {
+		year, month, day := t.Date()
+		// N.B. This will skip an hour if the DST transition
+		// happens at a multiple of 6 hours.
+		return time.Date(year, month, day, ((t.Hour()+6)/6)*6, 0, 0, 0, t.Location())
+	}},
+	{24 * time.Hour, func(t time.Time) time.Time {
+		year, month, day := t.Date()
+		return time.Date(year, month, day+1, 0, 0, 0, 0, t.Location())
+	}},
+	{30 * 24 * time.Hour, func(t time.Time) time.Time {
+		year, month, _ := t.Date()
+		return time.Date(year, month+1, 1, 0, 0, 0, 0, t.Location())
+	}},
+	{365 * 24 * time.Hour, func(t time.Time) time.Time {
+		return time.Date(t.Year()+1, time.January, 1, 0, 0, 0, 0, t.Location())
+	}},
+}
+
+// timeTicker calculates the ticks between min and max. levels >= 0
+// refer to entries in timeTickerLevels. levels < 0 start with -1 at
+// every 10 seconds and then alternate dividing by 2 and 5. So level
+// -3 is 1s, -9 is 1ms, -12 is 1us, etc.
+// https://play.golang.org/p/xUv4P25Wxi will print the level step
+// sizes.
+type timeTicker struct {
+	min, max time.Time
+}
+
+func (t *timeTicker) getNextTick(level int) func(time.Time) time.Time {
+	if level >= 0 {
+		if level >= len(timeTickerLevels) {
+			// TODO: larger ticks should do multiples of
+			// the year, like the linear scale does.
+			panic(fmt.Sprintf("invalid level %d", level))
+		}
+		return timeTickerLevels[level].next
+	} else {
+		exp, double := level/2+1, (level%2 == 0)
+		step := math.Pow10(exp) * 1e9
+		if double {
+			step = step * 5
+		}
+		return durationTicks(time.Duration(step)).Next
+	}
+}
+
+func (t *timeTicker) CountTicks(level int) int {
+	next := t.getNextTick(level)
+	var i int
+	// N.B. We cut off at 1e5 ticks. If you're plot is larger than
+	// that, you're on your own.
+	for x := next(t.min); x.Before(t.max) && i < 1e5; x = next(x) {
+		i++
+	}
+	return i
+}
+
+func (t *timeTicker) TicksAtLevel(level int) interface{} {
+	var ticks []time.Time
+	next := t.getNextTick(level)
+	for x := next(t.min); x.Before(t.max); x = next(x) {
+		ticks = append(ticks, x)
+	}
+	return ticks
+}
+
+func (t *timeTicker) GuessLevel() int {
+	dur := t.max.Sub(t.min)
+	for i := len(timeTickerLevels) - 1; i >= 0; i-- {
+		if dur > timeTickerLevels[i].min {
+			return i
+		}
+	}
+	return int(2 * (math.Log10(float64(dur)/1e9) - 2))
+}
+
+func (timeTicker) MaxLevel() int {
+	return len(timeTickerLevels) - 1
+}
+
+func (timeTicker) Label(cur, prev time.Time, level int) string {
+	dateFmt := "2006"
+	switch {
+	case level < 5:
+		dateFmt = "2006/1/2"
+		if !prev.IsZero() {
+			if prev.Year() == cur.Year() {
+				dateFmt = "Jan 2"
+				_, prevweek := prev.ISOWeek()
+				_, curweek := cur.ISOWeek()
+				if prevweek == curweek {
+					dateFmt = "Mon"
+					if prev.YearDay() == cur.YearDay() {
+						dateFmt = ""
+					}
+				}
+			}
+		}
+	case level < 6:
+		dateFmt = "2006/1"
+		if !prev.IsZero() && prev.Year() == cur.Year() {
+			dateFmt = "Jan"
+		}
+	}
+	timeFmt := ""
+	switch {
+	case level < -15: // = 1µs
+		timeFmt = "15:04:05.000000000"
+	case level < -9: // = 1ms
+		timeFmt = "15:04:05.000000"
+	case level < -3: // = 1s
+		timeFmt = "15:04:05.000"
+	case level < 0: // = 1m
+		timeFmt = "15:04:05"
+	case level < 4: // = 1d
+		timeFmt = "15:04"
+	}
+	return cur.Format(strings.TrimSpace(dateFmt + " " + timeFmt))
+}
+
+func (s *timeScale) Ticks(maxTicks int, pred func(major, minor table.Slice, labels []string) bool) (table.Slice, table.Slice, []string) {
+	min, max := s.getMinMax()
+	ticker := &timeTicker{min, max}
+	o := scale.TickOptions{Max: maxTicks, MaxLevel: ticker.MaxLevel()}
+	level, ok := o.FindLevel(ticker, ticker.GuessLevel())
+	if !ok {
+		// TODO(quentin): Better handling of too-large time range.
+		return nil, nil, nil
+	}
+	mkLabels := func(major []time.Time) []string {
+		// TODO(quentin): Pick a format based on which parts
+		// of the time have changed and are non-zero.
+		labels := make([]string, len(major))
+		if s.f != nil {
+			// Use custom formatter.
+			for i, x := range major {
+				labels[i] = s.f(x)
+			}
+			return labels
+		}
+		var prev time.Time
+		for i, t := range major {
+			labels[i] = ticker.Label(t, prev, level)
+			prev = t
+		}
+		return labels
+	}
+	var majors, minors []time.Time
+	var labels []string
+	for ; level <= o.MaxLevel; level++ {
+		majors = ticker.TicksAtLevel(level).([]time.Time)
+		minors = ticker.TicksAtLevel(level - 1).([]time.Time)
+		labels = mkLabels(majors)
+		if pred == nil || pred(majors, minors, labels) {
+			break
+		}
+	}
+	return majors, minors, labels
+}
+
+func (s *timeScale) SetFormatter(f interface{}) {
+	s.f = f.(func(time.Time) string)
+}
+
+func (s *timeScale) CloneScaler() Scaler {
 	s2 := *s
 	return &s2
 }
