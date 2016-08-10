@@ -630,7 +630,7 @@ func (s *linearScale) Ticks(max int, pred func(major, minor table.Slice, labels 
 		return labels
 	}
 	// Adjust level to satisfy pred.
-	for level <= o.MaxLevel {
+	for ; level <= o.MaxLevel; level++ {
 		majorx := ls.TicksAtLevel(level)
 		minorx := ls.TicksAtLevel(level - 1)
 		labels := mkLabels(majorx.([]float64))
