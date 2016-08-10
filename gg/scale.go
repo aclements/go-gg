@@ -165,14 +165,29 @@ type ContinuousScaler interface {
 	// TODO: There are two variations on min/max. 1) We can force
 	// the min/max, even if there's data beyond it. 2) We can say
 	// cap the scale to some min/max, but a smaller range is okay.
+	// Currently we can't express 2.
 
-	SetMin(v float64) ContinuousScaler
-	SetMax(v float64) ContinuousScaler
+	// SetMin and SetMax set the minimum and maximum values of
+	// this Scalar's domain and return the Scalar. If v is nil, it
+	// unsets the bound.
+	//
+	// v must be convertible to the Scaler's domain type. For
+	// example, if this is a linear scale, v can be of any
+	// numerical type. Unlike ExpandDomain, these do not set the
+	// Scaler's domain type.
+	SetMin(v interface{}) ContinuousScaler
+	SetMax(v interface{}) ContinuousScaler
 
-	// TODO: Should Include take an interface{} and work on any
-	// Scalar?
+	// TODO: Should Include work on any Scaler?
 
-	Include(v float64) ContinuousScaler
+	// Include requires that v be included in this Scaler's
+	// domain. Like SetMin/SetMax, this can expand Scaler's
+	// domain, but unlike SetMin/SetMax, this does not restrict
+	// it. If v is nil, it does nothing.
+	//
+	// v must be convertible to the Scaler's domain type. Unlike
+	// ExpandDomain, this does not set the Scaler's domain type.
+	Include(v interface{}) ContinuousScaler
 }
 
 // Unscaled represents a value that should not be scaled, but instead
@@ -445,25 +460,39 @@ func (s *linearScale) ExpandDomain(v table.Slice) {
 	s.dataMin, s.dataMax = min, max
 }
 
-func (s *linearScale) SetMin(v float64) ContinuousScaler {
-	s.s.Min = v
+func (s *linearScale) SetMin(v interface{}) ContinuousScaler {
+	if v == nil {
+		s.s.Min = math.NaN()
+		return s
+	}
+	vfloat := reflect.ValueOf(v).Convert(float64Type).Float()
+	s.s.Min = vfloat
 	return s
 }
 
-func (s *linearScale) SetMax(v float64) ContinuousScaler {
-	s.s.Max = v
+func (s *linearScale) SetMax(v interface{}) ContinuousScaler {
+	if v == nil {
+		s.s.Max = math.NaN()
+		return s
+	}
+	vfloat := reflect.ValueOf(v).Convert(float64Type).Float()
+	s.s.Max = vfloat
 	return s
 }
 
-func (s *linearScale) Include(v float64) ContinuousScaler {
-	if math.IsNaN(v) || math.IsInf(v, 0) {
+func (s *linearScale) Include(v interface{}) ContinuousScaler {
+	if v == nil {
+		return s
+	}
+	vfloat := reflect.ValueOf(v).Convert(float64Type).Float()
+	if math.IsNaN(vfloat) || math.IsInf(vfloat, 0) {
 		return s
 	}
 	if math.IsNaN(s.dataMin) {
-		s.dataMin, s.dataMax = v, v
+		s.dataMin, s.dataMax = vfloat, vfloat
 	} else {
-		s.dataMin = math.Min(s.dataMin, v)
-		s.dataMax = math.Max(s.dataMax, v)
+		s.dataMin = math.Min(s.dataMin, vfloat)
+		s.dataMax = math.Max(s.dataMax, vfloat)
 	}
 	return s
 }
