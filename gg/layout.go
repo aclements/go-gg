@@ -194,8 +194,8 @@ func (e *eltTicks) computeTicks() {
 	// Optimize ticks, keeping labels at least tickDistance apart.
 	e.ticks = make(map[Scaler]plotEltTicks)
 	for s := range e.scales() {
-		pred := func(ticks []float64, labels []string) bool {
-			if len(ticks) <= 1 {
+		pred := func(ticks, _ table.Slice, labels []string) bool {
+			if len(labels) <= 1 {
 				return true
 			}
 			// Check distance between labels.

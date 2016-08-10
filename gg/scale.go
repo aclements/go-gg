@@ -103,16 +103,47 @@ type Scaler interface {
 	// XXX If x is Unscaled, Map must only apply the ranger.
 	Map(x interface{}) interface{}
 
-	// XXX What should this return? moremath returns values in the
-	// input space, but that obviously doesn't work for discrete
-	// scales if I want the ticks between values. It could return
-	// values in the intermediate space or the output space.
+	// Ticks returns a set of "nice" major and minor tick marks
+	// spanning this Scaler's domain. The returned tick locations
+	// are values in this Scaler's domain type in increasing
+	// order. labels[i] gives the label of the major tick at
+	// major[i]. The minor ticks are a superset of the major
+	// ticks.
+	//
+	// max and pred constrain the ticks returned by Ticks. If
+	// possible, Ticks returns the largest set of ticks such that
+	// there are no more than max major ticks and the ticks
+	// satisfy pred. Both are hints, since for some scale types
+	// there's no clear way to reduce the number of ticks.
+	//
+	// pred should return true if the given set of ticks is
+	// acceptable. pred must be "monotonic" in the following
+	// sense: if pred is true for a given set of ticks, it must be
+	// true for any subset of those ticks and if pred is false for
+	// a given set of ticks, it must be false for any superset of
+	// those ticks. In other words, pred should return false if
+	// there are "too many" ticks or they are "too close
+	// together". If pred is nil, it is assumed to always be
+	// satisfied.
+	//
+	// If no tick marks can be produced (for example, there are no
+	// values in this Scaler's domain or the predicate cannot be
+	// satisfied), Ticks returns nil, nil, nil.
+	//
+	// TODO: Should this return ticks in the input space, the
+	// intermediate space, or the output space? moremath returns
+	// values in the input space. Input space values doesn't work
+	// for discrete scales if I want the ticks between values.
 	// Intermediate space works for continuous and discrete
-	// inputs, but not for discrete ranges (maybe that's okay).
-	// Output space is bad because I change the plot location in
-	// the course of layout. Currently it returns values in the
-	// input space or nil if ticks don't make sense.
-	Ticks(max int, pred func(major []float64, labels []string) bool) (major, minor table.Slice, labels []string)
+	// inputs, but not for discrete ranges (maybe that's okay) and
+	// it's awkward for a caller to do anything with an
+	// intermediate space value. Output space doesn't work with
+	// this API because I change the plot location in the course
+	// of layout without recomputing ticks. However, output space
+	// could work if Scaler exposed tick levels, since I could
+	// save the computed tick level across a re-layout and
+	// recompute the output space ticks from that.
+	Ticks(max int, pred func(major, minor table.Slice, labels []string) bool) (major, minor table.Slice, labels []string)
 
 	// SetFormatter sets the formatter for values on this scale.
 	//
@@ -252,7 +283,7 @@ func (s *defaultScale) Map(x interface{}) interface{} {
 	return s.ensure().Map(x)
 }
 
-func (s *defaultScale) Ticks(max int, pred func(major []float64, labels []string) bool) (major, minor table.Slice, labels []string) {
+func (s *defaultScale) Ticks(max int, pred func(major, minor table.Slice, labels []string) bool) (major, minor table.Slice, labels []string) {
 	return s.ensure().Ticks(max, pred)
 }
 
@@ -353,7 +384,7 @@ func (s *identityScale) RangeType() reflect.Type {
 func (s *identityScale) Ranger(r Ranger) Ranger        { return nil }
 func (s *identityScale) Map(x interface{}) interface{} { return x }
 
-func (s *identityScale) Ticks(max int, pred func(major []float64, labels []string) bool) (major, minor table.Slice, labels []string) {
+func (s *identityScale) Ticks(max int, pred func(major, minor table.Slice, labels []string) bool) (major, minor table.Slice, labels []string) {
 	return nil, nil, nil
 }
 
@@ -500,10 +531,16 @@ func (s *linearScale) Map(x interface{}) interface{} {
 	}
 }
 
-func (s *linearScale) Ticks(max int, pred func(major []float64, labels []string) bool) (major, minor table.Slice, labels []string) {
+func (s *linearScale) Ticks(max int, pred func(major, minor table.Slice, labels []string) bool) (major, minor table.Slice, labels []string) {
 	type Stringer interface {
 		String() string
 	}
+	if s.domainType == nil {
+		// There are no values and no domain type, so we can't
+		// compute ticks or return slices of the domain type.
+		return nil, nil, nil
+	}
+
 	o := scale.TickOptions{Max: max}
 
 	// If the domain type is integral, don't let the tick level go
@@ -515,6 +552,11 @@ func (s *linearScale) Ticks(max int, pred func(major []float64, labels []string)
 		reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
 		reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		o.MinLevel, o.MaxLevel = 0, 1000
+	}
+	ls := s.get()
+	level, ok := o.FindLevel(ls, 0)
+	if !ok {
+		return nil, nil, nil
 	}
 
 	mkLabels := func(major []float64) []string {
@@ -558,15 +600,24 @@ func (s *linearScale) Ticks(max int, pred func(major []float64, labels []string)
 		}
 		return labels
 	}
-	if pred != nil {
-		o.Pred = func(ticks []float64, level int) bool {
-			return pred(ticks, mkLabels(ticks))
+	// Adjust level to satisfy pred.
+	for level <= o.MaxLevel {
+		majorx := ls.TicksAtLevel(level)
+		minorx := ls.TicksAtLevel(level - 1)
+		labels := mkLabels(majorx.([]float64))
+
+		// Convert to domain type.
+		majorv := reflect.New(reflect.SliceOf(s.domainType))
+		minorv := reflect.New(reflect.SliceOf(s.domainType))
+		slice.Convert(majorv.Interface(), majorx)
+		slice.Convert(minorv.Interface(), minorx)
+		major, minor = majorv.Elem().Interface(), minorv.Elem().Interface()
+
+		if pred == nil || pred(major, minor, labels) {
+			return major, minor, labels
 		}
 	}
-
-	ls := s.get()
-	majorx, minorx := ls.Ticks(o)
-	return majorx, minorx, mkLabels(majorx)
+	return nil, nil, nil
 }
 
 func (s *linearScale) SetFormatter(f interface{}) {
@@ -667,7 +718,7 @@ func (s *ordinalScale) Map(x interface{}) interface{} {
 	}
 }
 
-func (s *ordinalScale) Ticks(max int, pred func(major []float64, labels []string) bool) (major, minor table.Slice, labels []string) {
+func (s *ordinalScale) Ticks(max int, pred func(major, minor table.Slice, labels []string) bool) (major, minor table.Slice, labels []string) {
 	// TODO: Return *no* ticks and only labels. Can't currently
 	// express this.
 
