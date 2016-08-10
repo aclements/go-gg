@@ -423,27 +423,42 @@ func (s *identityScale) CloneScaler() Scaler {
 // Maybe a sub-interface for continuous Scalers?
 func NewLinearScaler() ContinuousScaler {
 	// TODO: Control over base.
-	return &linearScale{
-		s:       scale.Linear{Min: math.NaN(), Max: math.NaN()},
+	return &moremathScale{
+		min:     math.NaN(),
+		max:     math.NaN(),
 		dataMin: math.NaN(),
 		dataMax: math.NaN(),
 	}
 }
 
-type linearScale struct {
-	s scale.Linear
+func NewLogScaler(base int) ContinuousScaler {
+	return &moremathScale{
+		min:     math.NaN(),
+		max:     math.NaN(),
+		base:    base,
+		dataMin: math.NaN(),
+		dataMax: math.NaN(),
+	}
+}
+
+type moremathScale struct {
 	r Ranger
 	f interface{}
 
 	domainType       reflect.Type
+	base             int
+	min, max         float64
 	dataMin, dataMax float64
 }
 
-func (s *linearScale) String() string {
-	return fmt.Sprintf("linear [%g,%g] => %s", s.s.Min, s.s.Max, s.r)
+func (s *moremathScale) String() string {
+	if s.base > 0 {
+		return fmt.Sprintf("log [%d,%g,%g] => %s", s.base, s.min, s.max, s.r)
+	}
+	return fmt.Sprintf("linear [%g,%g] => %s", s.min, s.max, s.r)
 }
 
-func (s *linearScale) ExpandDomain(vs table.Slice) {
+func (s *moremathScale) ExpandDomain(vs table.Slice) {
 	if s.domainType == nil {
 		s.domainType = reflect.TypeOf(vs).Elem()
 	}
@@ -465,27 +480,27 @@ func (s *linearScale) ExpandDomain(vs table.Slice) {
 	s.dataMin, s.dataMax = min, max
 }
 
-func (s *linearScale) SetMin(v interface{}) ContinuousScaler {
+func (s *moremathScale) SetMin(v interface{}) ContinuousScaler {
 	if v == nil {
-		s.s.Min = math.NaN()
+		s.min = math.NaN()
 		return s
 	}
 	vfloat := reflect.ValueOf(v).Convert(float64Type).Float()
-	s.s.Min = vfloat
+	s.min = vfloat
 	return s
 }
 
-func (s *linearScale) SetMax(v interface{}) ContinuousScaler {
+func (s *moremathScale) SetMax(v interface{}) ContinuousScaler {
 	if v == nil {
-		s.s.Max = math.NaN()
+		s.max = math.NaN()
 		return s
 	}
 	vfloat := reflect.ValueOf(v).Convert(float64Type).Float()
-	s.s.Max = vfloat
+	s.max = vfloat
 	return s
 }
 
-func (s *linearScale) Include(v interface{}) ContinuousScaler {
+func (s *moremathScale) Include(v interface{}) ContinuousScaler {
 	if v == nil {
 		return s
 	}
@@ -502,25 +517,40 @@ func (s *linearScale) Include(v interface{}) ContinuousScaler {
 	return s
 }
 
-func (s *linearScale) get() scale.Linear {
-	ls := s.s
-	if ls.Min > ls.Max {
-		ls.Min, ls.Max = ls.Max, ls.Min
-	}
-	if math.IsNaN(ls.Min) {
-		ls.Min = s.dataMin
-	}
-	if math.IsNaN(ls.Max) {
-		ls.Max = s.dataMax
-	}
-	if math.IsNaN(ls.Min) {
-		// Only possible if both dataMin and dataMax are NaN.
-		ls.Min, ls.Max = -1, 1
-	}
-	return ls
+type tickMapper interface {
+	scale.Ticker
+	Map(float64) float64
 }
 
-func (s *linearScale) Ranger(r Ranger) Ranger {
+func (s *moremathScale) get() tickMapper {
+	min, max := s.min, s.max
+	if min > max {
+		min, max = max, min
+	}
+	if math.IsNaN(min) {
+		min = s.dataMin
+	}
+	if math.IsNaN(max) {
+		max = s.dataMax
+	}
+	if math.IsNaN(min) {
+		// Only possible if both dataMin and dataMax are NaN.
+		min, max = -1, 1
+	}
+	if s.base > 0 {
+		ls, err := scale.NewLog(min, max, s.base)
+		if err != nil {
+			panic(err)
+		}
+		ls.SetClamp(true)
+		return &ls
+	}
+	return &scale.Linear{
+		Min: min, Max: max,
+	}
+}
+
+func (s *moremathScale) Ranger(r Ranger) Ranger {
 	old := s.r
 	if r != nil {
 		s.r = r
@@ -528,11 +558,11 @@ func (s *linearScale) Ranger(r Ranger) Ranger {
 	return old
 }
 
-func (s *linearScale) RangeType() reflect.Type {
+func (s *moremathScale) RangeType() reflect.Type {
 	return s.r.RangeType()
 }
 
-func (s *linearScale) Map(x interface{}) interface{} {
+func (s *moremathScale) Map(x interface{}) interface{} {
 	ls := s.get()
 	var scaled float64
 	switch x := x.(type) {
@@ -565,7 +595,7 @@ func (s *linearScale) Map(x interface{}) interface{} {
 	}
 }
 
-func (s *linearScale) Ticks(max int, pred func(major, minor table.Slice, labels []string) bool) (major, minor table.Slice, labels []string) {
+func (s *moremathScale) Ticks(max int, pred func(major, minor table.Slice, labels []string) bool) (major, minor table.Slice, labels []string) {
 	type Stringer interface {
 		String() string
 	}
@@ -654,11 +684,11 @@ func (s *linearScale) Ticks(max int, pred func(major, minor table.Slice, labels 
 	return nil, nil, nil
 }
 
-func (s *linearScale) SetFormatter(f interface{}) {
+func (s *moremathScale) SetFormatter(f interface{}) {
 	s.f = f
 }
 
-func (s *linearScale) CloneScaler() Scaler {
+func (s *moremathScale) CloneScaler() Scaler {
 	s2 := *s
 	return &s2
 }
