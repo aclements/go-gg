@@ -249,10 +249,9 @@ func (e *eltSubplot) render(r *eltRender) {
 		}
 	}
 
-	// Skip border and scale ticks.
+	// Draw border and scale ticks.
 	//
 	// TODO: Theme.
-	return
 
 	// Render border.
 	rnd := func(x float64) float64 {
@@ -304,22 +303,33 @@ func renderGrid(svg *svg.SVG, dir rune, scale Scaler, ticks plotEltTicks, start,
 func renderScale(svg *svg.SVG, dir rune, scale Scaler, ticks plotEltTicks, pos float64) {
 	const length float64 = 4 // TODO: Theme
 
-	major := mapMany(scale, ticks.major).([]float64)
+	// TODO: This relies on major ticks painting over minor ticks;
+	// perhaps minor ticks should be suppressed if they are at the
+	// same position as major ticks.
+	for _, t := range []struct {
+		length float64
+		s      table.Slice
+	}{
+		{length, ticks.minor},
+		{length * 2, ticks.major},
+	} {
+		ticks := mapMany(scale, t.s).([]float64)
 
-	r := func(x float64) float64 {
-		// Round to nearest N.
-		return math.Floor(x + 0.5)
-	}
-	var path []string
-	for _, p := range major {
-		if dir == 'x' {
-			path = append(path, fmt.Sprintf("M%.6g %.6gv%.6g", r(p), r(pos), -length))
-		} else {
-			path = append(path, fmt.Sprintf("M%.6g %.6gh%.6g", r(pos), r(p), length))
+		r := func(x float64) float64 {
+			// Round to nearest N.
+			return math.Floor(x + 0.5)
 		}
-	}
+		var path []string
+		for _, p := range ticks {
+			if dir == 'x' {
+				path = append(path, fmt.Sprintf("M%.6g %.6gv%.6g", r(p), r(pos), -t.length))
+			} else {
+				path = append(path, fmt.Sprintf("M%.6g %.6gh%.6g", r(pos), r(p), t.length))
+			}
+		}
 
-	svg.Path(strings.Join(path, ""), "stroke:#888; stroke-width:2") // TODO: Theme
+		svg.Path(strings.Join(path, ""), "stroke:#888; stroke-width:2") // TODO: Theme
+	}
 }
 
 func (e *eltTicks) render(r *eltRender) {
