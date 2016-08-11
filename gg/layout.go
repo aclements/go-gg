@@ -122,6 +122,7 @@ type eltTicks struct {
 
 type plotEltTicks struct {
 	major  table.Slice
+	minor  table.Slice
 	labels []string
 }
 
@@ -220,8 +221,8 @@ func (e *eltTicks) computeTicks() {
 
 			return true
 		}
-		major, _, labels := s.Ticks(maxTicks, pred)
-		e.ticks[s] = plotEltTicks{major, labels}
+		major, minor, labels := s.Ticks(maxTicks, pred)
+		e.ticks[s] = plotEltTicks{major, minor, labels}
 	}
 }
 
