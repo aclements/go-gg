@@ -681,6 +681,7 @@ func (s *moremathScale) Ticks(max int, pred func(major, minor table.Slice, label
 			return major, minor, labels
 		}
 	}
+	Warning.Printf("%s: unable to compute satisfactory ticks, axis will be empty", s)
 	return nil, nil, nil
 }
 
@@ -1264,6 +1265,9 @@ func (r *defaultColorRanger) MapLevel(i, j int) interface{} {
 func mapMany(scaler Scaler, seq table.Slice) table.Slice {
 	sv := reflect.ValueOf(seq)
 	rt := reflect.SliceOf(scaler.RangeType())
+	if seq == nil {
+		return reflect.MakeSlice(rt, 0, 0).Interface()
+	}
 	res := reflect.MakeSlice(rt, sv.Len(), sv.Len())
 	for i, len := 0, sv.Len(); i < len; i++ {
 		val := scaler.Map(sv.Index(i).Interface())
