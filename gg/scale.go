@@ -616,6 +616,8 @@ func (s *moremathScale) Ticks(max int, pred func(major, minor table.Slice, label
 		reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
 		reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		o.MinLevel, o.MaxLevel = 0, 1000
+	default:
+		o.MinLevel, o.MaxLevel = -1000, 1000
 	}
 	ls := s.get()
 	level, ok := o.FindLevel(ls, 0)
