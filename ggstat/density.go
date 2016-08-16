@@ -6,6 +6,7 @@ package ggstat
 
 import (
 	"math"
+	"reflect"
 
 	"github.com/aclements/go-gg/generic/slice"
 	"github.com/aclements/go-gg/table"
@@ -157,10 +158,16 @@ func (d Density) F(g table.Grouping) table.Grouping {
 			min, max = min-d.Widen*kde.Bandwidth, max+d.Widen*kde.Bandwidth
 		}
 
+		// TODO: Unify this with LOESS and LeastSquares and make them all convert to the original data type.
+		ctype := table.ColType(t, d.X)
 		ss := vec.Linspace(min, max, d.N)
-		nt := new(table.Builder).Add(d.X, ss)
-		nt.Add(dname, vec.Map(kde.PDF, ss))
-		nt.Add(cname, vec.Map(kde.CDF, ss))
+		vs := reflect.New(ctype)
+		slice.Convert(vs.Interface(), ss)
+		var vsf []float64
+		slice.Convert(vsf, vs.Interface())
+		nt := new(table.Builder).Add(d.X, vs.Elem().Interface())
+		nt.Add(dname, vec.Map(kde.PDF, vsf))
+		nt.Add(cname, vec.Map(kde.CDF, vsf))
 		preserveConsts(nt, t)
 		return nt.Done()
 	})
