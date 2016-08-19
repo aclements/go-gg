@@ -301,15 +301,13 @@ func renderGrid(svg *svg.SVG, dir rune, scale Scaler, ticks plotEltTicks, start,
 func renderScale(svg *svg.SVG, dir rune, scale Scaler, ticks plotEltTicks, pos int) {
 	const length float64 = 4 // TODO: Theme
 
-	// TODO: This relies on major ticks painting over minor ticks;
-	// perhaps minor ticks should be suppressed if they are at the
-	// same position as major ticks.
+	have := map[float64]bool{}
 	for _, t := range []struct {
 		length float64
 		s      table.Slice
 	}{
-		{length, ticks.minor},
 		{length * 2, ticks.major},
+		{length, ticks.minor},
 	} {
 		ticks := mapMany(scale, t.s).([]float64)
 
@@ -319,10 +317,17 @@ func renderScale(svg *svg.SVG, dir rune, scale Scaler, ticks plotEltTicks, pos i
 		}
 		var path []string
 		for _, p := range ticks {
+			p = r(p)
+			if have[p] {
+				// Avoid overplotting the same tick
+				// marks.
+				continue
+			}
+			have[p] = true
 			if dir == 'x' {
-				path = append(path, fmt.Sprintf("M%.6g %dv%.6g", r(p), pos, -t.length))
+				path = append(path, fmt.Sprintf("M%.6g %dv%.6g", p, pos, -t.length))
 			} else {
-				path = append(path, fmt.Sprintf("M%d %.6gh%.6g", pos, r(p), t.length))
+				path = append(path, fmt.Sprintf("M%d %.6gh%.6g", pos, p, t.length))
 			}
 		}
 
