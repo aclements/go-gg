@@ -5,6 +5,7 @@
 package gg
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"math"
@@ -301,6 +302,7 @@ func renderGrid(svg *svg.SVG, dir rune, scale Scaler, ticks plotEltTicks, start,
 func renderScale(svg *svg.SVG, dir rune, scale Scaler, ticks plotEltTicks, pos int) {
 	const length float64 = 4 // TODO: Theme
 
+	var path bytes.Buffer
 	have := map[float64]bool{}
 	for _, t := range []struct {
 		length float64
@@ -315,7 +317,6 @@ func renderScale(svg *svg.SVG, dir rune, scale Scaler, ticks plotEltTicks, pos i
 			// Round to nearest N.
 			return math.Floor(x + 0.5)
 		}
-		var path []string
 		for _, p := range ticks {
 			p = r(p)
 			if have[p] {
@@ -325,14 +326,14 @@ func renderScale(svg *svg.SVG, dir rune, scale Scaler, ticks plotEltTicks, pos i
 			}
 			have[p] = true
 			if dir == 'x' {
-				path = append(path, fmt.Sprintf("M%.6g %dv%.6g", p, pos, -t.length))
+				fmt.Fprintf(&path, "M%.6g %dv%.6g", p, pos, -t.length)
 			} else {
-				path = append(path, fmt.Sprintf("M%d %.6gh%.6g", pos, p, t.length))
+				fmt.Fprintf(&path, "M%d %.6gh%.6g", pos, p, t.length)
 			}
 		}
 
-		svg.Path(strings.Join(path, ""), "stroke:#888; stroke-width:2") // TODO: Theme
 	}
+	svg.Path(path.String(), "stroke:#888; stroke-width:2") // TODO: Theme
 }
 
 func (e *eltTicks) render(r *eltRender) {
