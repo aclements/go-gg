@@ -259,7 +259,9 @@ func (e *eltSubplot) render(r *eltRender) {
 	// TODO: Theme.
 
 	// Render border.
-	svg.Path(fmt.Sprintf("M%d %dV%dH%d", xi+1, yi, y2i-1, x2i), "stroke:#888; fill:none; stroke-width:2") // TODO: Theme.
+	if false {
+		svg.Path(fmt.Sprintf("M%d %dV%dH%d", xi+1, yi, y2i-1, x2i), "stroke:#888; fill:none; stroke-width:2") // TODO: Theme.
+	}
 
 	// Render scale ticks.
 	for s := range e.scales["x"] {
