@@ -145,7 +145,9 @@ func (d Density) F(g table.Grouping) table.Grouping {
 		kde.Sample = samples[gid]
 
 		if kde.Sample.Weight() == 0 {
-			return new(table.Builder).Add(d.X, []float64{}).Add(dname, []float64{}).Add(cname, []float64{}).Done()
+			nt := new(table.Builder).Add(d.X, []float64{}).Add(dname, []float64{}).Add(cname, []float64{})
+			preserveConsts(nt, t)
+			return nt.Done()
 		}
 
 		if d.Bandwidth == 0 {

@@ -87,7 +87,9 @@ func (s ECDF) F(g table.Grouping) table.Grouping {
 
 		// Ignore empty tables.
 		if len(xs) == 0 {
-			return new(table.Builder).Add(s.X, []float64{}).Add(cname, []float64{}).Add(dname, []float64{}).Done()
+			nt := new(table.Builder).Add(s.X, []float64{}).Add(cname, []float64{}).Add(dname, []float64{})
+			preserveConsts(nt, t)
+			return nt.Done()
 		}
 
 		// Create output columns.
