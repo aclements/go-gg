@@ -5,9 +5,6 @@
 package ggstat
 
 import (
-	"math"
-	"reflect"
-
 	"github.com/aclements/go-gg/generic/slice"
 	"github.com/aclements/go-gg/table"
 	"github.com/aclements/go-moremath/stats"
@@ -43,16 +40,16 @@ type Density struct {
 	//
 	// TODO: This is particularly sensitive to the scale
 	// transform.
+	//
+	// TODO: Base the default on the bandwidth. If the bandwidth
+	// is really narrow, we may need a lot of samples to exceed
+	// the Nyquist rate.
 	N int
 
-	// Widen controls the domain of the returned density estimate.
-	// If Widen is < 0, the domain is the range of the data.
-	// Otherwise, the domain will be expanded by Widen*Bandwidth
-	// (which may be the computed bandwidth). If Widen is 0, it is
-	// replaced with a default value of 3.
-	//
-	// TODO: This is different from ECDF and LeastSquares. Make
-	// them consistent.
+	// Widen sets the domain of the returned density estimate
+	// to Widen times the span of the data. If Widen is 0, it is
+	// treated as 1.1 (that is, widen the domain by 10%, or 5% on
+	// the left and 5% on the right).
 	Widen float64
 
 	// SplitGroups indicates that each group in the table should
@@ -97,80 +94,40 @@ func (d Density) F(g table.Grouping) table.Grouping {
 		BoundaryMin:    d.BoundaryMin,
 		BoundaryMax:    d.BoundaryMax,
 	}
-	if d.N == 0 {
-		d.N = 200
-	}
-	if d.Widen == 0 {
-		d.Widen = 3
-	}
 	dname, cname := "probability density", "cumulative density"
 
-	// Gather samples.
-	samples := map[table.GroupID]stats.Sample{}
-	for _, gid := range g.Tables() {
-		t := g.Table(gid)
-		var sample stats.Sample
-		slice.Convert(&sample.Xs, t.MustColumn(d.X))
-		if d.W != "" {
-			slice.Convert(&sample.Weights, t.MustColumn(d.W))
-		}
-		samples[gid] = sample
+	addEmpty := func(out *table.Builder) {
+		out.Add(dname, []float64{})
+		out.Add(cname, []float64{})
 	}
 
-	min, max := math.NaN(), math.NaN()
-	if !d.SplitGroups {
-		// Compute combined bounds.
-		for _, sample := range samples {
-			smin, smax := sample.Bounds()
-			if math.IsNaN(smin) {
-				continue
+	return Function{
+		X: d.X, N: d.N, Widen: d.Widen, SplitGroups: d.SplitGroups,
+		Fn: func(gid table.GroupID, in *table.Table, sampleAt []float64, out *table.Builder) {
+			if len(sampleAt) == 0 {
+				addEmpty(out)
+				return
 			}
 
-			bandwidth := d.Bandwidth
+			// Get input sample.
+			var sample stats.Sample
+			slice.Convert(&sample.Xs, in.MustColumn(d.X))
+			if d.W != "" {
+				slice.Convert(&sample.Weights, in.MustColumn(d.W))
+				if sample.Weight() == 0 {
+					addEmpty(out)
+					return
+				}
+			}
+
+			// Compute KDE.
+			kde.Sample = sample
 			if d.Bandwidth == 0 {
-				bandwidth = stats.BandwidthScott(sample)
+				kde.Bandwidth = stats.BandwidthScott(sample)
 			}
 
-			smin, smax = smin-d.Widen*bandwidth, smax+d.Widen*bandwidth
-			if smin < min || math.IsNaN(min) {
-				min = smin
-			}
-			if smax > max || math.IsNaN(max) {
-				max = smax
-			}
-		}
-	}
-
-	return table.MapTables(g, func(gid table.GroupID, t *table.Table) *table.Table {
-		kde.Sample = samples[gid]
-
-		if kde.Sample.Weight() == 0 {
-			nt := new(table.Builder).Add(d.X, []float64{}).Add(dname, []float64{}).Add(cname, []float64{})
-			preserveConsts(nt, t)
-			return nt.Done()
-		}
-
-		if d.Bandwidth == 0 {
-			kde.Bandwidth = stats.BandwidthScott(kde.Sample)
-		}
-
-		if d.SplitGroups {
-			// Compute group bounds.
-			min, max = kde.Sample.Bounds()
-			min, max = min-d.Widen*kde.Bandwidth, max+d.Widen*kde.Bandwidth
-		}
-
-		// TODO: Unify this with LOESS and LeastSquares and make them all convert to the original data type.
-		ctype := table.ColType(t, d.X)
-		ss := vec.Linspace(min, max, d.N)
-		vs := reflect.New(ctype)
-		slice.Convert(vs.Interface(), ss)
-		var vsf []float64
-		slice.Convert(&vsf, vs.Elem().Interface())
-		nt := new(table.Builder).Add(d.X, vs.Elem().Interface())
-		nt.Add(dname, vec.Map(kde.PDF, vsf))
-		nt.Add(cname, vec.Map(kde.CDF, vsf))
-		preserveConsts(nt, t)
-		return nt.Done()
-	})
+			out.Add(dname, vec.Map(kde.PDF, sampleAt))
+			out.Add(cname, vec.Map(kde.CDF, sampleAt))
+		},
+	}.F(g)
 }
