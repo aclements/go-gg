@@ -150,7 +150,7 @@ func drawPath(canvas *svg.SVG, xs, ys []float64, stroke color.Color, fill color.
 	// XXX Stroke width
 
 	style := cssPaint("stroke", stroke) + ";" + cssPaint("fill", fill) + ";stroke-width:3"
-	canvas.Path(string(path), style)
+	canvas.Path(wrapPath(string(path)), style)
 }
 
 type markPoint struct {

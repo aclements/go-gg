@@ -296,7 +296,7 @@ func renderGrid(svg *svg.SVG, dir rune, scale Scaler, ticks plotEltTicks, start,
 		}
 	}
 
-	svg.Path(strings.Join(path, ""), "stroke: #fff; stroke-width:2") // TODO: Theme.
+	svg.Path(wrapPath(strings.Join(path, "")), "stroke: #fff; stroke-width:2") // TODO: Theme.
 }
 
 func renderScale(svg *svg.SVG, dir rune, scale Scaler, ticks plotEltTicks, pos int) {
@@ -333,7 +333,7 @@ func renderScale(svg *svg.SVG, dir rune, scale Scaler, ticks plotEltTicks, pos i
 		}
 
 	}
-	svg.Path(path.String(), "stroke:#888; stroke-width:2") // TODO: Theme
+	svg.Path(wrapPath(path.String()), "stroke:#888; stroke-width:2") // TODO: Theme
 }
 
 func (e *eltTicks) render(r *eltRender) {
@@ -445,4 +445,42 @@ func (env *renderEnv) Size() (w, h float64) {
 
 func round(x float64) int {
 	return int(math.Floor(x + 0.5))
+}
+
+// wrapPath wraps path data p to avoid exceeding SVG's recommended
+// line length limit of 255 characters.
+func wrapPath(p string) string {
+	const width = 70
+	if len(p) <= width {
+		return p
+	}
+	// Chop up p until we get below the width limit.
+	parts := make([]string, 0, 16)
+	for len(p) > width {
+		// Find the last command or space before exceeding width.
+		lastCmd, lastSpace := 0, 0
+		for i, ch := range p {
+			if i >= width && (lastCmd != 0 || lastSpace != 0) {
+				break
+			}
+			if 'a' <= ch && ch <= 'z' || 'A' <= ch && ch <= 'Z' {
+				lastCmd = i
+			} else if ch == ' ' {
+				lastSpace = i
+			}
+		}
+		split := len(p)
+		// Prefer splitting at commands, but take spaces in
+		// case it's a huge command.
+		if lastCmd != 0 {
+			split = lastCmd
+		} else if lastSpace != 0 {
+			split = lastSpace
+		}
+		parts, p = append(parts, p[:split]), p[split:]
+	}
+	if len(p) > 0 {
+		parts = append(parts, p)
+	}
+	return strings.Join(parts, "\n")
 }
