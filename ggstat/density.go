@@ -46,19 +46,9 @@ type Density struct {
 	// the Nyquist rate.
 	N int
 
-	// Widen sets the domain of the returned density estimate
-	// to Widen times the span of the data. If Widen is 0, it is
-	// treated as 1.1 (that is, widen the domain by 10%, or 5% on
-	// the left and 5% on the right).
-	Widen float64
-
-	// SplitGroups indicates that each group in the table should
-	// have separate bounds based on the data in that group alone.
-	// The default, false, indicates that the density function
-	// should use the bounds of all of the data combined. This
-	// makes it possible to stack KDEs and easier to compare KDEs
-	// across groups.
-	SplitGroups bool
+	// Domain specifies the domain at which to sample this function.
+	// If Domain is nil, it defaults to DomainData{}.
+	Domain FunctionDomainer
 
 	// Kernel is the kernel to use for the KDE.
 	Kernel stats.KDEKernel
@@ -102,7 +92,7 @@ func (d Density) F(g table.Grouping) table.Grouping {
 	}
 
 	return Function{
-		X: d.X, N: d.N, Widen: d.Widen, SplitGroups: d.SplitGroups,
+		X: d.X, N: d.N, Domain: d.Domain,
 		Fn: func(gid table.GroupID, in *table.Table, sampleAt []float64, out *table.Builder) {
 			if len(sampleAt) == 0 {
 				addEmpty(out)

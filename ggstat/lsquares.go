@@ -34,21 +34,9 @@ type LeastSquares struct {
 	// is 0, a reasonable default is used.
 	N int
 
-	// Widen sets the domain of the returned LOESS sample points
-	// to Widen times the span of the data. If Widen is 0, it is
-	// treated as 1.1 (that is, widen the domain by 10%, or 5% on
-	// the left and 5% on the right).
-	//
-	// TODO: Have a way to specify a specific range?
-	Widen float64
-
-	// SplitGroups indicates that each group in the table should
-	// have separate bounds based on the data in that group alone.
-	// The default, false, indicates that the bounds should be
-	// based on all of the data in the table combined. This makes
-	// it possible to stack LOESS fits and easier to compare them
-	// across groups.
-	SplitGroups bool
+	// Domain specifies the domain at which to sample this function.
+	// If Domain is nil, it defaults to DomainData{}.
+	Domain FunctionDomainer
 
 	// Degree specifies the degree of the fit polynomial. If it is
 	// 0, it is treated as 1.
@@ -62,7 +50,7 @@ func (s LeastSquares) F(g table.Grouping) table.Grouping {
 
 	var xs, ys []float64
 	return Function{
-		X: s.X, N: s.N, Widen: s.Widen, SplitGroups: s.SplitGroups,
+		X: s.X, N: s.N, Domain: s.Domain,
 		Fn: func(gid table.GroupID, in *table.Table, sampleAt []float64, out *table.Builder) {
 			if len(sampleAt) == 0 {
 				out.Add(s.Y, []float64{})
