@@ -153,6 +153,12 @@ func (p *Plot) getScales(aes string) scalerTree {
 	return st
 }
 
+func (p *Plot) copyScales(old, new table.GroupID) {
+	for _, st := range p.scales {
+		st.scales[new] = st.find(old)
+	}
+}
+
 // SetScale binds a scale to the given visual aesthetic. SetScale is
 // shorthand for SetScaleAt(aes, s, table.RootGroupID). SetScale must
 // be called before Add.

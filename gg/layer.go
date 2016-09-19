@@ -289,9 +289,11 @@ func (l LayerTooltips) Apply(p *Plot) {
 
 	// Split up by subplot and flatten each subplot.
 	tables := map[*subplot][]*table.Table{}
+	gids := map[*subplot]table.GroupID{}
 	for _, gid := range p.Data().Tables() {
 		s := subplotOf(gid)
 		tables[s] = append(tables[s], p.Data().Table(gid))
+		gids[s] = gid
 	}
 	var ng table.GroupingBuilder
 	for k, ts := range tables {
@@ -299,7 +301,9 @@ func (l LayerTooltips) Apply(p *Plot) {
 		for i, t := range ts {
 			subg.Add(table.RootGroupID.Extend(i), t)
 		}
-		ng.Add(table.RootGroupID.Extend(k), table.Flatten(subg.Done()))
+		ngid := table.RootGroupID.Extend(k)
+		ng.Add(ngid, table.Flatten(subg.Done()))
+		p.copyScales(gids[k], ngid)
 	}
 	p.SetData(ng.Done())
 
