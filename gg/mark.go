@@ -59,6 +59,39 @@ func (m *markPath) mark(env *renderEnv, canvas *svg.SVG) {
 	drawPath(canvas, xs, ys, stroke, fill)
 }
 
+type markArea struct {
+	x, upper, lower, fill *scaledData
+}
+
+func reversed(data []float64) []float64 {
+	var rev []float64
+	for i := len(data) - 1; i >= 0; i-- {
+		rev = append(rev, data[i])
+	}
+	return rev
+}
+
+func (m *markArea) mark(env *renderEnv, canvas *svg.SVG) {
+	xs := env.get(m.x).([]float64)
+	upper := make([]float64, len(xs))
+	if m.upper != nil {
+		upper = env.get(m.upper).([]float64)
+	}
+	lower := make([]float64, len(xs))
+	if m.lower != nil {
+		lower = env.get(m.lower).([]float64)
+	}
+	var fill color.Color = color.RGBA{0, 0, 0, 128}
+	if m.fill != nil {
+		fill = env.getFirst(m.fill).(color.Color)
+	}
+
+	xs = append(xs, reversed(xs)...)
+	ys := append(upper, reversed(lower)...)
+
+	drawPath(canvas, xs, ys, color.Transparent, fill)
+}
+
 type markSteps struct {
 	dir StepMode
 

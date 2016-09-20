@@ -145,6 +145,40 @@ func (l LayerPaths) apply(p *Plot, sort bool) {
 	}, p.Data().Tables()})
 }
 
+// LayerArea shades the area between two columns with a polygon. It is
+// useful in conjunction with ggstat.AggMax and ggstat.AggMin for
+// drawing the extents of data.
+type LayerArea struct {
+	// X names the column that defines the input of each point. If
+	// this is empty, it defaults to the first column.
+	X string
+
+	// Upper and Lower name columns that define the range of
+	// response to shade. If either is "", it defaults to a
+	// constant 0 value.
+	Upper, Lower string
+
+	// Fill names a column that defines the fill color of each
+	// path. If Fill is "", it defaults to 50% opacity
+	// black. Otherwise, the data is grouped by Fill.
+	Fill string
+}
+
+func (l LayerArea) Apply(p *Plot) {
+	defaultCols(p, &l.X)
+	if l.Fill != "" {
+		p.GroupBy(l.Fill)
+	}
+	defer p.Save().Restore()
+	p = p.SortBy(l.X)
+	p.marks = append(p.marks, plotMark{&markArea{
+		p.use("x", l.X),
+		p.use("y", l.Upper),
+		p.use("y", l.Lower),
+		p.use("fill", l.Fill),
+	}, p.Data().Tables()})
+}
+
 // LayerPoints layers a point mark at each data point.
 type LayerPoints struct {
 	// X and Y name columns that define input and response of each
