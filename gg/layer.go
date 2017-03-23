@@ -159,15 +159,23 @@ type LayerArea struct {
 	Upper, Lower string
 
 	// Fill names a column that defines the fill color of each
-	// path. If Fill is "", it defaults to 50% opacity
-	// black. Otherwise, the data is grouped by Fill.
+	// area. If Fill is "", it defaults to black. Otherwise, the
+	// data is grouped by Fill.
 	Fill string
+
+	// FillOpacity names a column that defines the fill opacity of
+	// each area. If FillOpacity is "", it defaults to 0.5.
+	// Otherwise, the data is grouped by FillOpacity.
+	FillOpacity string
 }
 
 func (l LayerArea) Apply(p *Plot) {
 	defaultCols(p, &l.X)
 	if l.Fill != "" {
 		p.GroupBy(l.Fill)
+	}
+	if l.FillOpacity != "" {
+		p.GroupBy(l.FillOpacity)
 	}
 	defer p.Save().Restore()
 	p = p.SortBy(l.X)
@@ -183,6 +191,7 @@ func (l LayerArea) Apply(p *Plot) {
 		p.use("y", upper),
 		p.use("y", lower),
 		p.use("fill", l.Fill),
+		p.use("opacity", l.FillOpacity),
 	}, p.Data().Tables()})
 }
 

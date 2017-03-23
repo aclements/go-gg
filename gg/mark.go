@@ -60,7 +60,7 @@ func (m *markPath) mark(env *renderEnv, canvas *svg.SVG) {
 }
 
 type markArea struct {
-	x, upper, lower, fill *scaledData
+	x, upper, lower, fill, fillOpacity *scaledData
 }
 
 func reversed(data []float64) []float64 {
@@ -75,10 +75,20 @@ func (m *markArea) mark(env *renderEnv, canvas *svg.SVG) {
 	xs := env.get(m.x).([]float64)
 	upper := env.get(m.upper).([]float64)
 	lower := env.get(m.lower).([]float64)
-	var fill color.Color = color.RGBA{0, 0, 0, 128}
+	var fill color.Color = color.Black
 	if m.fill != nil {
 		fill = env.getFirst(m.fill).(color.Color)
 	}
+	fillOpacity := 0.5
+	if m.fillOpacity != nil {
+		fillOpacity = env.getFirst(m.fillOpacity).(float64)
+	}
+	r, g, b, a := fill.RGBA()
+	fill = color.RGBA64{
+		uint16(float64(r) * fillOpacity),
+		uint16(float64(g) * fillOpacity),
+		uint16(float64(b) * fillOpacity),
+		uint16(float64(a) * fillOpacity)}
 
 	xs = append(xs, reversed(xs)...)
 	ys := append(upper, reversed(lower)...)
