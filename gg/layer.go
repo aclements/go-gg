@@ -171,10 +171,17 @@ func (l LayerArea) Apply(p *Plot) {
 	}
 	defer p.Save().Restore()
 	p = p.SortBy(l.X)
+	upper, lower := l.Upper, l.Lower
+	if upper == "" {
+		upper = p.Const(0)
+	}
+	if lower == "" {
+		lower = p.Const(0)
+	}
 	p.marks = append(p.marks, plotMark{&markArea{
 		p.use("x", l.X),
-		p.use("y", l.Upper),
-		p.use("y", l.Lower),
+		p.use("y", upper),
+		p.use("y", lower),
 		p.use("fill", l.Fill),
 	}, p.Data().Tables()})
 }

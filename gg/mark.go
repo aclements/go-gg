@@ -73,14 +73,8 @@ func reversed(data []float64) []float64 {
 
 func (m *markArea) mark(env *renderEnv, canvas *svg.SVG) {
 	xs := env.get(m.x).([]float64)
-	upper := make([]float64, len(xs))
-	if m.upper != nil {
-		upper = env.get(m.upper).([]float64)
-	}
-	lower := make([]float64, len(xs))
-	if m.lower != nil {
-		lower = env.get(m.lower).([]float64)
-	}
+	upper := env.get(m.upper).([]float64)
+	lower := env.get(m.lower).([]float64)
 	var fill color.Color = color.RGBA{0, 0, 0, 128}
 	if m.fill != nil {
 		fill = env.getFirst(m.fill).(color.Color)
