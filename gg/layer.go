@@ -294,6 +294,18 @@ type LayerTags struct {
 	// Label names the column that gives the text to put in the
 	// tag at X, Y. Label is required.
 	Label string
+
+	// HPos controls the horizontal position of the tag if
+	// multiple points have the same Label. The label will be
+	// attached to the point closest to HPos between the left-most
+	// (HPos == 0) and the right-most (HPos == 1) points on this
+	// curve.
+	HPos float64
+
+	// Offset controls the pixel offset of the tag from the point
+	// it is attached to. If these are both zero, they are treated
+	// as -20, -20.
+	OffsetX, OffsetY int
 }
 
 func (l LayerTags) Apply(p *Plot) {
@@ -301,6 +313,9 @@ func (l LayerTags) Apply(p *Plot) {
 	// always on top and can perhaps extend outside the plot area?
 
 	defaultCols(p, &l.X, &l.Y)
+	if l.OffsetX == 0 && l.OffsetY == 0 {
+		l.OffsetX, l.OffsetY = -20, -20
+	}
 	defer p.Save().Restore()
 	p.GroupBy(l.Label)
 	// TODO: I keep wanting an abstraction for a column across
@@ -314,6 +329,9 @@ func (l LayerTags) Apply(p *Plot) {
 		p.use("x", l.X),
 		p.use("y", l.Y),
 		labels,
+		l.HPos,
+		l.OffsetX,
+		l.OffsetY,
 	}, p.Data().Tables()})
 }
 

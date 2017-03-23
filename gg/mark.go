@@ -341,26 +341,27 @@ func (m *markTiles) mark(env *renderEnv, canvas *svg.SVG) {
 type markTags struct {
 	x, y   *scaledData
 	labels map[table.GroupID]table.Slice
+	hpos   float64
+
+	offsetX, offsetY int
 }
 
 func (m *markTags) mark(env *renderEnv, canvas *svg.SVG) {
-	const offsetX float64 = -20
-	const offsetY float64 = -20
-	const padX float64 = 5
+	const padX = 5
 
 	xs, ys := env.get(m.x).([]float64), env.get(m.y).([]float64)
 	if len(xs) == 0 {
 		return
 	}
 
-	// Find the point closest to the middle.
+	// Find the point closest to hpos between the min and max.
 	//
 	// TODO: Give the user control over this.
 	minx, maxx := stats.Bounds(xs)
-	avgx := (minx + maxx) / 2
-	midi, middelta := 0, math.Abs(xs[0]-avgx)
+	targetx := minx + (maxx-minx)*m.hpos
+	midi, middelta := 0, math.Abs(xs[0]-targetx)
 	for i, x := range xs {
-		delta := math.Abs(x - avgx)
+		delta := math.Abs(x - targetx)
 		if delta < middelta {
 			midi, middelta = i, delta
 		}
@@ -375,11 +376,20 @@ func (m *markTags) mark(env *renderEnv, canvas *svg.SVG) {
 	//
 	// TODO: Make automatic positioning account for bounds of plot.
 	//
+	// TODO: Adjust positions to avoid overlap. Unfortunately,
+	// this requires some global optimization, but mark only sees
+	// one tag at a time.
+	//
 	// TODO: Re-enable the tag box when I have decent text metrics.
 	//t := measureString(fontSize, label)
 	//canvas.Rect(int(xs[midi]+offsetX-t.width), int(ys[midi]+offsetY-0.75*t.leading), int(t.width), int(1.5*t.leading), `rx="4"`, `fill="white"`, `stroke="black"`)
-	canvas.Text(int(xs[midi]+offsetX-padX), int(ys[midi]+offsetY), label, `dy=".3em"`, `text-anchor="end"`)
-	canvas.Path(fmt.Sprintf("M%.6g %.6gc%.6g %.6g,%.6g %.6g,%.6g %.6g", xs[midi], ys[midi], 0.8*offsetX, 0.0, 0.2*offsetX, offsetY, offsetX, offsetY), `fill="none"`, `stroke="black"`, `stroke-dasharray="2, 3"`, `stroke-width="2"`)
+	if m.offsetX > 0 {
+		// To the right, left-aligned.
+		canvas.Text(int(xs[midi])+m.offsetX+padX, int(ys[midi])+m.offsetY, label, `dy=".3em"`)
+	} else {
+		canvas.Text(int(xs[midi])+m.offsetX-padX, int(ys[midi])+m.offsetY, label, `dy=".3em"`, `text-anchor="end"`)
+	}
+	canvas.Path(fmt.Sprintf("M%.6g %.6gc%.6g %.6g,%.6g %.6g,%.6g %.6g", xs[midi], ys[midi], 0.8*float64(m.offsetX), 0.0, 0.2*float64(m.offsetX), float64(m.offsetY), float64(m.offsetX), float64(m.offsetY)), `fill="none"`, `stroke="black"`, `stroke-dasharray="2, 3"`, `stroke-width="2"`)
 }
 
 type markTooltips struct {
