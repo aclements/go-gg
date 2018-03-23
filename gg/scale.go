@@ -711,7 +711,7 @@ type timeScale struct {
 }
 
 func (s *timeScale) String() string {
-	return fmt.Sprintf("time [%g,%g] => %s", s.min, s.max, s.r)
+	return fmt.Sprintf("time [%v,%v] => %s", s.min, s.max, s.r)
 }
 
 func (s *timeScale) ExpandDomain(vs table.Slice) {
