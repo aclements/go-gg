@@ -26,7 +26,7 @@ func TableFromStructs(structs Slice) *Table {
 	rec = func(typ reflect.Type, index []int) {
 		for fn := 0; fn < typ.NumField(); fn++ {
 			field := typ.Field(fn)
-			if field.PkgPath != "" {
+			if field.PkgPath != "" && !field.Anonymous {
 				continue
 			}
 			oldIndexLen := len(index)
