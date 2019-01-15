@@ -193,10 +193,10 @@ func TestGroupingBuilder(t *testing.T) {
 		t.Fatalf("etab+etab should be empty; got %v", v)
 	}
 	if v := ngb(etab).Add(RootGroupID, tab1).Done(); !equal(tab1, v) {
-		t.Fatalf("etab+(RootGroupID, tab1) should be %v; got %", tab1, v)
+		t.Fatalf("etab+(RootGroupID, tab1) should be %v; got %v", tab1, v)
 	}
 	if v := ngb(tab1).Add(RootGroupID, etab).Done(); !equal(tab1, v) {
-		t.Fatalf("(RootGroupID, tab1)+etab should be %v; got %", tab1, v)
+		t.Fatalf("(RootGroupID, tab1)+etab should be %v; got %v", tab1, v)
 	}
 
 	if v := ngb(tab0).Add(RootGroupID, tab0).Done(); !equal(tab0, v) {
